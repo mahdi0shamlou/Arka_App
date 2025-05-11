@@ -1,4 +1,4 @@
-package com.arkafile
+package com.arka.file
 
 import android.app.Application
 import com.facebook.react.PackageList

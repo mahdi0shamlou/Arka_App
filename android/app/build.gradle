@@ -84,9 +84,9 @@ packagingOptions {
   exclude "**/META-INF/*.kotlin_module"
 }
     
-    namespace "com.arkafile"
+    namespace "com.arka.file"
     defaultConfig {
-        applicationId "com.arkafile"
+        applicationId "com.arka.file"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
