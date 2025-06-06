@@ -9,10 +9,55 @@ import {
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
+import PushNotification from 'react-native-push-notification';
 import ErrorHandler from './components/ErrorHandler';
 import Loader from './components/Loader';
 import SplashScreen from './components/SplashScreen';
 import Web from './components/Web';
+
+// Configure push notifications
+PushNotification.configure({
+  // Called when token is generated
+  onRegister: function (token) {
+    console.log('TOKEN:', token);
+  },
+
+  // Called when a notification is received
+  onNotification: function (notification) {
+    console.log('NOTIFICATION:', notification);
+    
+    // Process the notification if it was clicked/tapped
+    if (notification.userInteraction) {
+      // Handle notification tap here
+    }
+  },
+
+  // Required for iOS
+  permissions: {
+    alert: true,
+    badge: true,
+    sound: true,
+  },
+
+  // Should the initial notification be popped automatically
+  popInitialNotification: true,
+
+  // Request permissions on iOS
+  requestPermissions: Platform.OS === 'ios',
+});
+
+// Create a channel for Android (required for Android 8.0+)
+PushNotification.createChannel(
+  {
+    channelId: 'default-channel-id',
+    channelName: 'Default Channel',
+    channelDescription: 'A default channel for notifications',
+    soundName: 'default',
+    importance: 4,
+    vibrate: true,
+  },
+  (created) => console.log(`createChannel returned '${created}'`)
+);
 
 let backPressTime = 0;
 
