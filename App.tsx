@@ -14,6 +14,7 @@ import ErrorHandler from './components/ErrorHandler';
 import Loader from './components/Loader';
 import SplashScreen from './components/SplashScreen';
 import Web from './components/Web';
+import backgroundService from './services/backgroundService';
 
 // Configure push notifications
 PushNotification.configure({
@@ -114,6 +115,44 @@ export default function HomeScreen() {
     setTimeout(() => {
       setSplash(false);
     }, 2000);
+  }, []);
+
+  useEffect(() => {
+    // Start background service when app loads
+    const initializeBackgroundService = () => {
+      // Configure the service
+      backgroundService.configure({
+        apiUrl: 'https://www.arkafile.info/api/check-status', // URL API را تغییر دهید
+        intervalMinutes: 5, // هر 5 دقیقه چک کند
+        enableNotifications: true,
+        enableLogging: true,
+      });
+
+      // Enable auto-restart
+      backgroundService.setAutoRestart(true);
+
+      // Start the service
+      backgroundService.start();
+      console.log('Background service started with persistence');
+    };
+
+    initializeBackgroundService();
+
+    // Set up periodic health check
+    const healthCheckInterval = setInterval(() => {
+      const stats = backgroundService.getStats();
+      if (!stats.isRunning) {
+        console.log('Service health check: Service is down, restarting...');
+        backgroundService.start();
+      }
+    }, 30000); // Check every 30 seconds
+
+    // Cleanup on unmount
+    return () => {
+      clearInterval(healthCheckInterval);
+      backgroundService.stop();
+      console.log('Background service stopped');
+    };
   }, []);
 
   if (splash) {
