@@ -19,10 +19,12 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@babel/runtime": "^7.25.0",
+    "@react-native-community/cli": "latest",
     "@react-native/babel-preset": "0.79.2",
     "@react-native/eslint-config": "0.79.2",
     "@react-native/metro-config": "0.79.2",
     "@react-native/typescript-config": "0.79.2",
+    "@types/react": "^19.1.6",
     "@types/react-native-push-notification": "^8.1.4",
     "eslint": "^8.19.0",
     "typescript": "5.0.4"

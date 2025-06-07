@@ -1,64 +1,51 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   BackHandler,
+  Button,
   Dimensions,
   Keyboard,
   Platform,
   StatusBar,
   ToastAndroid,
+  View,
+  PermissionsAndroid,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
 import PushNotification from 'react-native-push-notification';
+
+// import backgroundService from './services/backgroundService';
+import SplashScreen from './components/SplashScreen';
 import ErrorHandler from './components/ErrorHandler';
 import Loader from './components/Loader';
-import SplashScreen from './components/SplashScreen';
 import Web from './components/Web';
 import backgroundService from './services/backgroundService';
 
-// Configure push notifications
+// Configure local notifications only (no Firebase, minimal config)
 PushNotification.configure({
-  // Called when token is generated
-  onRegister: function (token) {
-    console.log('TOKEN:', token);
-  },
-
-  // Called when a notification is received
+  // Minimal configuration to avoid Firebase
   onNotification: function (notification) {
     console.log('NOTIFICATION:', notification);
-    
-    // Process the notification if it was clicked/tapped
-    if (notification.userInteraction) {
-      // Handle notification tap here
-    }
   },
 
-  // Required for iOS
-  permissions: {
-    alert: true,
-    badge: true,
-    sound: true,
-  },
-
-  // Should the initial notification be popped automatically
-  popInitialNotification: true,
-
-  // Request permissions on iOS
-  requestPermissions: Platform.OS === 'ios',
+  // Disable all remote/Firebase features
+  requestPermissions: false,
+  popInitialNotification: false,
 });
 
 // Create a channel for Android (required for Android 8.0+)
 PushNotification.createChannel(
   {
     channelId: 'default-channel-id',
-    channelName: 'Default Channel',
-    channelDescription: 'A default channel for notifications',
+    channelName: 'ArkaFile Notifications',
+    channelDescription: 'Default notifications for ArkaFile app',
     soundName: 'default',
     importance: 4,
     vibrate: true,
   },
   (created) => console.log(`createChannel returned '${created}'`)
 );
+
 
 let backPressTime = 0;
 
@@ -70,6 +57,40 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const webViewRef = useRef<WebView>(null);
   const [canGoBack, setCanGoBack] = useState(false);
+
+  // تست نوتیفیکیشن
+  const testNotification = () => {
+    PushNotification.localNotification({
+      channelId: 'default-channel-id',
+      title: '✅ تست اعلان',
+      message: 'نوتیفیکیشن با موفقیت ارسال شد!',
+      playSound: true,
+      vibrate: true,
+    });
+  };
+
+  // چک و درخواست مجوز در هر startup (تا مجوز بگیرد)
+  useEffect(() => {
+    const requestPermissionIfNeeded = async () => {
+      if (Platform.OS === 'android' && Platform.Version >= 33) {
+        const hasPermission = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+        
+        // اگر مجوز ندارد، هر بار درخواست کن
+        if (!hasPermission) {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+           
+          );
+          
+        
+        }
+      }
+    };
+
+    requestPermissionIfNeeded();
+  }, []);
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', e => {
@@ -117,6 +138,7 @@ export default function HomeScreen() {
     }, 2000);
   }, []);
 
+  // Background service disabled to avoid Firebase errors
   useEffect(() => {
     // Start background service when app loads
     const initializeBackgroundService = () => {
@@ -169,6 +191,12 @@ export default function HomeScreen() {
         barStyle="light-content" // for white icons
         backgroundColor="#1d4ed8" // color behind icons (Android only)
       />
+      <View style={{ padding: 20 }}>
+        <Button 
+          title='🔔 تست اعلان'
+          onPress={testNotification}
+        />
+      </View>
       {hasError ? (
         <ErrorHandler setHasError={setHasError} setLoading={setLoading} />
       ) : (
