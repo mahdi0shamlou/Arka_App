@@ -13,6 +13,7 @@ import WebView from 'react-native-webview';
 import PushNotification from 'react-native-push-notification';
 
 import {TokenService} from './services/tokenService';
+import {BackgroundService} from './services/backgroundService';
 import SplashScreen from './components/SplashScreen';
 import ErrorHandler from './components/ErrorHandler';
 import Loader from './components/Loader';
@@ -68,7 +69,26 @@ export default function HomeScreen() {
       }
     };
 
+    const initializeBackgroundService = async () => {
+      try {
+        // Set API URL - تغییر دهید به URL واقعی خود
+        BackgroundService.setApiUrl('https://back.arkafile.info/Profile');
+        
+        // Start background service
+        await BackgroundService.start();
+        console.log('Background service started successfully');
+      } catch (error) {
+        console.error('Error starting background service:', error);
+      }
+    };
+
     requestPermissionIfNeeded();
+    initializeBackgroundService();
+
+    // Cleanup on unmount
+    return () => {
+      BackgroundService.stop();
+    };
   }, []);
 
   useEffect(() => {
