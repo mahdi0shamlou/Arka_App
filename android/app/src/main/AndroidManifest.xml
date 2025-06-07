@@ -7,7 +7,11 @@
   <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+  <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
+  <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
 
   <application
     android:name=".MainApplication"
@@ -45,5 +49,10 @@
             <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
         </intent-filter>
     </receiver>
+
+    <service
+      android:name="com.asterinet.react.bgactions.BackgroundActionsService"
+      android:foregroundServiceType="dataSync"
+      android:exported="false" />
   </application>
 </manifest>

@@ -30,7 +30,7 @@ export class BackgroundService {
    * Simple background task that runs every minute
    */
   private static async backgroundTask(): Promise<void> {
-    console.log('[BackgroundService] Background task started');
+    console.log('[BackgroundService] Background task started - checking every minute');
     
     // Keep running and check every minute
     while (true) {
@@ -39,28 +39,34 @@ export class BackgroundService {
         const token = await TokenService.getValidAccessToken();
         
         if (token) {
-          console.log('[BackgroundService] Token found, making API request');
-          
-          // Make API request with token
-          const response = await fetch(this.apiUrl, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-          });
+          try {
+            // Make API request with token and timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-          if (response.ok) {
-            console.log('[BackgroundService] API request successful');
-            PushNotificationService.showSuccessNotification('درخواست API موفقیت‌آمیز بود!');
-          } else {
-            console.log(`[BackgroundService] API request failed: ${response.status}`);
+            const response = await fetch('https://back.arkafile.info/Profile', {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+              console.log('[BackgroundService] API request successful');
+              PushNotificationService.showSuccessNotification('درخواست API موفقیت‌آمیز بود!');
+            } else {
+              console.log(`[BackgroundService] API request failed: ${response.status}`);
+            }
+          } catch (fetchError) {
+            console.log('[BackgroundService] Request error:', fetchError);
           }
-        } else {
-          console.log('[BackgroundService] No token found, skipping API call');
         }
       } catch (error) {
-        console.log('[BackgroundService] Error in background task:', error);
+        console.log('[BackgroundService] Error:', error);
       }
       
       // Wait 1 minute before next check
@@ -82,24 +88,32 @@ export class BackgroundService {
     }
 
     try {
-      console.log('[BackgroundService] Starting background service');
-      
       const options = {
         taskName: 'ArkaFile API Service',
-        taskTitle: 'ArkaFile API Service',
-        taskDesc: 'پردازش درخواست‌های API',
+        taskTitle: 'ArkaFile API Service', 
+        taskDesc: 'بررسی دوره‌ای API هر دقیقه',
         taskIcon: {
           name: 'ic_launcher',
           type: 'mipmap',
+        },
+        linkingURI: 'arkafile://background',
+        parameters: {
+          delay: 1000,
+        },
+        progressBar: {
+          max: 100,
+          value: 0,
+          indeterminate: false,
         }
       };
 
       await BackgroundActions.start(this.backgroundTask, options);
       this.isRunning = true;
       
-      console.log('[BackgroundService] Background service started successfully');
+      console.log('[BackgroundService] Started - checking every minute');
     } catch (error) {
-      console.error('[BackgroundService] Error starting background service:', error);
+      console.error('[BackgroundService] Start error:', error);
+      this.isRunning = false;
     }
   }
 
@@ -113,15 +127,12 @@ export class BackgroundService {
     }
 
     try {
-      console.log('[BackgroundService] Stopping background service');
-      
-      // Stop background actions
       await BackgroundActions.stop();
       this.isRunning = false;
-      
-      console.log('[BackgroundService] Background service stopped successfully');
+      console.log('[BackgroundService] Stopped');
     } catch (error) {
-      console.error('[BackgroundService] Error stopping background service:', error);
+      console.error('[BackgroundService] Stop error:', error);
+      this.isRunning = false;
     }
   }
 
@@ -137,7 +148,6 @@ export class BackgroundService {
    */
   static updateApiUrl(newUrl: string): void {
     this.setApiUrl(newUrl);
-    console.log(`[BackgroundService] API URL updated to: ${newUrl}`);
   }
 
   /**

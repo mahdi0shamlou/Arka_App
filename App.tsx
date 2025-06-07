@@ -56,15 +56,33 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const requestPermissionIfNeeded = async () => {
-      if (Platform.OS === 'android' && Platform.Version >= 33) {
-        const hasPermission = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-        );
-        
-        if (!hasPermission) {
-          await PermissionsAndroid.request(
+      if (Platform.OS === 'android') {
+        // Request notification permission for Android 13+
+        if (Platform.Version >= 33) {
+          const hasNotificationPermission = await PermissionsAndroid.check(
             PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
           );
+          
+          if (!hasNotificationPermission) {
+            await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+            );
+          }
+        }
+
+        // Request battery optimization exemption
+        try {
+          const hasBatteryPermission = await PermissionsAndroid.check(
+            'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS' as any
+          );
+          
+          if (!hasBatteryPermission) {
+            await PermissionsAndroid.request(
+              'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS' as any
+            );
+          }
+        } catch (error) {
+          console.log('Battery optimization permission error:', error);
         }
       }
     };
