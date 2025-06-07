@@ -1,6 +1,7 @@
 import React, {useEffect} from 'react';
 import {Linking} from 'react-native';
 import WebView from 'react-native-webview';
+import CookieManager from '@react-native-cookies/cookies';
 import {TokenService} from '../services/tokenService';
 
 interface IProps {
@@ -12,13 +13,8 @@ interface IProps {
 
 function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   useEffect(() => {
-    // Sync tokens when component mounts
     const initializeTokens = async () => {
-      try {
-        await TokenService.syncTokensFromCookies();
-      } catch (error) {
-        console.error('Error initializing tokens:', error);
-      }
+      await checkAndSaveTokenFromCookies();
     };
 
     initializeTokens();
@@ -33,44 +29,53 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     return true;
   };
 
+  const checkAndSaveTokenFromCookies = async () => {
+    try {
+      const domains = [
+        'https://www.arkafile.info',
+        'https://arkafile.info'
+      ];
+      
+      for (const domain of domains) {
+        try {
+          const cookies = await CookieManager.get(domain);
+          
+          if (cookies.token && cookies.token.value) {
+            await TokenService.saveTokens({token: cookies.token.value});
+            return;
+          }
+        } catch (err) {
+          // Silent error handling
+        }
+      }
+    } catch (error) {
+      console.error('Error checking cookies:', error);
+    }
+  };
+
   const handleLoadEnd = async () => {
     setLoading(false);
     
-    // Sync tokens after page load
-    try {
-      await TokenService.syncTokensFromCookies();
-      
-      // Log current token status for debugging
-      const isValid = await TokenService.isTokenValid();
-      const accessToken = await TokenService.getValidAccessToken();
-      
-      console.log('Token status after page load:', {
-        isValid,
-        hasAccessToken: !!accessToken,
-      });
-    } catch (error) {
-      console.error('Error syncing tokens after load:', error);
-    }
+    // Check and save token from cookies
+    await checkAndSaveTokenFromCookies();
   };
 
   const handleMessage = async (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
       
-      // Handle token updates from web page
-      if (data.type === 'TOKEN_UPDATE' && data.tokens) {
-        await TokenService.saveTokens(data.tokens);
-        console.log('Tokens updated from web page');
+      if (data.type === 'CHECK_COOKIES') {
+        setTimeout(async () => {
+          await checkAndSaveTokenFromCookies();
+        }, 2000);
       }
       
-      // Handle logout
       if (data.type === 'LOGOUT') {
         await TokenService.clearTokens();
         await TokenService.clearCookies();
-        console.log('User logged out - tokens cleared');
       }
     } catch (error) {
-      console.log('Received non-JSON message:', event.nativeEvent.data);
+      // Silent error handling for non-JSON messages
     }
   };
 
@@ -92,58 +97,34 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       onHttpError={e => {
         setHasError(true);
       }}
-      // Enable sharing cookies with WebView
       sharedCookiesEnabled={true}
-      // Enable DOM storage for better token handling
+      thirdPartyCookiesEnabled={true}
       domStorageEnabled={true}
-      // Allow JavaScript communication
       javaScriptEnabled={true}
-      // Inject JavaScript to communicate with web page
+      startInLoadingState={true}
+      mixedContentMode={'compatibility'}
+      allowUniversalAccessFromFileURLs={true}
+      setSupportMultipleWindows={false}
+      cacheEnabled={true}
+      allowsInlineMediaPlayback={true}
+      userAgent="Mozilla/5.0 (Linux; Android 10; SM-A505FN) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36"
       injectedJavaScript={`
-        // Function to send tokens to React Native
-        function sendTokensToApp() {
-          try {
-            // Try to get tokens from localStorage
-            const tokens = {
-              access_token: localStorage.getItem('access_token') || localStorage.getItem('token'),
-              refresh_token: localStorage.getItem('refresh_token'),
-              expires_in: localStorage.getItem('expires_in'),
-              token_type: localStorage.getItem('token_type') || 'Bearer'
-            };
-            
-            if (tokens.access_token) {
+        document.addEventListener('click', function(e) {
+          if (e.target) {
+            const text = e.target.textContent || e.target.innerText || '';
+            if (text.includes('خروج') || text.includes('Logout') || text.includes('logout')) {
               window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'TOKEN_UPDATE',
-                tokens: tokens
+                type: 'LOGOUT'
+              }));
+            } else if (text.includes('ورود') || text.includes('Login') || text.includes('login')) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'CHECK_COOKIES'
               }));
             }
-          } catch (error) {
-            console.log('Error sending tokens:', error);
-          }
-        }
-        
-        // Send tokens when page loads
-        sendTokensToApp();
-        
-        // Monitor localStorage changes
-        const originalSetItem = localStorage.setItem;
-        localStorage.setItem = function(key, value) {
-          originalSetItem.apply(this, arguments);
-          if (key.includes('token') || key.includes('auth')) {
-            sendTokensToApp();
-          }
-        };
-        
-        // Monitor for logout events
-        document.addEventListener('click', function(e) {
-          if (e.target && (e.target.textContent.includes('خروج') || e.target.textContent.includes('Logout'))) {
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'LOGOUT'
-            }));
           }
         });
         
-        true; // Required for injected JavaScript
+        true;
       `}
     />
   );
