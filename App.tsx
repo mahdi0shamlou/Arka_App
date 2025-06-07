@@ -17,7 +17,7 @@ import SplashScreen from './components/SplashScreen';
 import ErrorHandler from './components/ErrorHandler';
 import Loader from './components/Loader';
 import Web from './components/Web';
-import backgroundService from './services/backgroundService';
+
 
 PushNotification.configure({
   onNotification: function (notification) {
@@ -117,33 +117,7 @@ export default function HomeScreen() {
     }, 2000);
   }, []);
 
-  useEffect(() => {
-    const initializeBackgroundService = () => {
-      backgroundService.configure({
-        apiUrl: 'https://www.arkafile.info/api/check-status',
-        intervalMinutes: 5,
-        enableNotifications: true,
-        enableLogging: true,
-      });
 
-      backgroundService.setAutoRestart(true);
-      backgroundService.start();
-    };
-
-    initializeBackgroundService();
-
-    const healthCheckInterval = setInterval(() => {
-      const stats = backgroundService.getStats();
-      if (!stats.isRunning) {
-        backgroundService.start();
-      }
-    }, 30000);
-
-    return () => {
-      clearInterval(healthCheckInterval);
-      backgroundService.stop();
-    };
-  }, []);
 
   if (splash) {
     return <SplashScreen />;
