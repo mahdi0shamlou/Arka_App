@@ -12,7 +12,6 @@
     "@react-native-cookies/cookies": "^6.2.1",
     "react": "19.0.0",
     "react-native": "0.79.2",
-    "react-native-background-actions": "^4.0.1",
     "react-native-push-notification": "^8.1.1",
     "react-native-safe-area-context": "^5.4.0",
     "react-native-webview": "^13.13.5"
