@@ -36,10 +36,7 @@
     </activity>
     <meta-data  android:name="com.dieam.reactnativepushnotification.notification_foreground" android:value="false"/>
     <meta-data  android:name="com.dieam.reactnativepushnotification.notification_color" android:resource="@android:color/white"/>
-    <service 
-        android:name="com.asterinet.react.bgactions.RNBackgroundActionsTask" 
-        android:foregroundServiceType="shortService"
-    />
+    
      <receiver android:name="com.dieam.reactnativepushnotification.modules.RNPushNotificationActions" android:exported="false" />
     <receiver android:name="com.dieam.reactnativepushnotification.modules.RNPushNotificationPublisher" android:exported="false" />
     <receiver android:name="com.dieam.reactnativepushnotification.modules.RNPushNotificationBootEventReceiver" android:exported="true">

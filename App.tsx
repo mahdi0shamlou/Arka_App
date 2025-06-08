@@ -1,28 +1,26 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   BackHandler,
+  Button,
   Dimensions,
   Keyboard,
+  PermissionsAndroid,
   Platform,
   StatusBar,
   ToastAndroid,
-  PermissionsAndroid,
-  Button,
 } from 'react-native';
+import PushNotification from 'react-native-push-notification';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
-import PushNotification from 'react-native-push-notification';
 
 import {NativeModules} from 'react-native';
-import {BackgroundService} from './services/backgroundService';
-import SplashScreen from './components/SplashScreen';
 import ErrorHandler from './components/ErrorHandler';
 import Loader from './components/Loader';
+import SplashScreen from './components/SplashScreen';
 import Web from './components/Web';
+import {TokenService} from './services/tokenService';
 
-
-const {BackgroundNotifModule} = NativeModules
-
+const {BackgroundNotifModule} = NativeModules;
 
 PushNotification.configure({
   onNotification: function (notification) {
@@ -41,9 +39,8 @@ PushNotification.createChannel(
     importance: 4,
     vibrate: true,
   },
-  (created) => console.log(`createChannel returned '${created}'`)
+  created => console.log(`createChannel returned '${created}'`),
 );
-
 
 let backPressTime = 0;
 
@@ -56,20 +53,18 @@ export default function HomeScreen() {
   const webViewRef = useRef<WebView>(null);
   const [canGoBack, setCanGoBack] = useState(false);
 
-
-
   useEffect(() => {
     const requestPermissionIfNeeded = async () => {
       if (Platform.OS === 'android') {
         // Request notification permission for Android 13+
         if (Platform.Version >= 33) {
           const hasNotificationPermission = await PermissionsAndroid.check(
-            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
           );
-          
+
           if (!hasNotificationPermission) {
             await PermissionsAndroid.request(
-              PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+              PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
             );
           }
         }
@@ -77,12 +72,12 @@ export default function HomeScreen() {
         // Request battery optimization exemption
         try {
           const hasBatteryPermission = await PermissionsAndroid.check(
-            'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS' as any
+            'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS' as any,
           );
-          
+
           if (!hasBatteryPermission) {
             await PermissionsAndroid.request(
-              'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS' as any
+              'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS' as any,
             );
           }
         } catch (error) {
@@ -91,26 +86,7 @@ export default function HomeScreen() {
       }
     };
 
-    const initializeBackgroundService = async () => {
-      try {
-        // Set API URL - تغییر دهید به URL واقعی خود
-        BackgroundService.setApiUrl('https://back.arkafile.info/Profile');
-        
-        // Start background service
-        await BackgroundService.start();
-        console.log('Background service started successfully');
-      } catch (error) {
-        console.error('Error starting background service:', error);
-      }
-    };
-
     requestPermissionIfNeeded();
-    initializeBackgroundService();
-
-    // Cleanup on unmount
-    return () => {
-      BackgroundService.stop();
-    };
   }, []);
 
   useEffect(() => {
@@ -126,7 +102,6 @@ export default function HomeScreen() {
       hide.remove();
     };
   }, []);
-
 
   const onAndroidBackPress = useCallback(() => {
     if (canGoBack) {
@@ -159,8 +134,6 @@ export default function HomeScreen() {
     }, 2000);
   }, []);
 
-
-
   if (splash) {
     return <SplashScreen />;
   }
@@ -171,27 +144,31 @@ export default function HomeScreen() {
         height: screenHeight - keyboardHeight,
         backgroundColor: '#1d4ed8',
       }}>
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor="#1d4ed8"
+      <StatusBar barStyle="light-content" backgroundColor="#1d4ed8" />
+
+      <Button
+        title="Save Token Now"
+        onPress={async () => {
+          try {
+            console.log('=== SAVING TOKEN ===');
+            await TokenService.saveTokens({
+              token:
+                'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.test_token_for_debug',
+            });
+            console.log('Token saved successfully!');
+
+            // بعد از save، بلافاصله check کن
+            const saved = await TokenService.getStoredTokens();
+            console.log('Immediately after save:', saved);
+          } catch (error) {
+            console.error('Error saving token:', error);
+          }
+        }}
       />
-     <Button 
-  title="Create Request" 
-  onPress={() => {
-    try {
-      console.log('Button pressed, calling BackgroundNotifModule...');
-      if (BackgroundNotifModule && BackgroundNotifModule.CreateRequest) {
-        BackgroundNotifModule.CreateRequest('1234567890');
-        console.log('Method called successfully');
-      } else {
-        console.log('BackgroundNotifModule or CreateRequest method not found');
-        console.log('Available methods:', Object.keys(BackgroundNotifModule || {}));
-      }
-    } catch (error) {
-      console.error('Error calling BackgroundNotifModule:', error);
-    }
-  }} 
-/>
+      <Button
+        title="Native Check"
+        onPress={() => BackgroundNotifModule.CreateRequest('test')}
+      />
       {hasError ? (
         <ErrorHandler setHasError={setHasError} setLoading={setLoading} />
       ) : (
