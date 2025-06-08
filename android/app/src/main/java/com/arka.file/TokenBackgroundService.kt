@@ -123,7 +123,7 @@ class TokenBackgroundService : Service() {
             }
             
             val notificationText = if (name != null) {
-                "خوش آمدید $name - Token فعال است"
+                "خوش آمدید $name"
             } else {
                 "Token موجود است و فعال می‌باشد"
             }
@@ -202,7 +202,7 @@ class TokenBackgroundService : Service() {
                 "ArkaFile Background Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "سرویس بررسی توکن ArkaFile"
+                description = "سرویس اعلانات "
                 setShowBadge(false)
             }
             
@@ -213,7 +213,7 @@ class TokenBackgroundService : Service() {
 
     private fun createPersistentNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
         .setContentTitle("ArkaFile")
-        .setContentText("سرویس بررسی توکن در حال اجراست")
+        .setContentText("سرویس اعلانات فعال است")
         .setSmallIcon(R.mipmap.ic_launcher)
         .setPriority(NotificationCompat.PRIORITY_LOW)
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
