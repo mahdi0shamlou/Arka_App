@@ -169,6 +169,14 @@ export default function HomeScreen() {
         title="Native Check"
         onPress={() => BackgroundNotifModule.CreateRequest('test')}
       />
+      <Button
+        title="Start Background Service"
+        onPress={() => BackgroundNotifModule.startBackgroundService()}
+      />
+      <Button
+        title="Stop Background Service"
+        onPress={() => BackgroundNotifModule.stopBackgroundService()}
+      />
       {hasError ? (
         <ErrorHandler setHasError={setHasError} setLoading={setLoading} />
       ) : (

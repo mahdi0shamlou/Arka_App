@@ -5,6 +5,7 @@ import com.facebook.react.bridge.ReactContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import android.util.Log
+import android.content.Intent
 
 class BackgroundNotifModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
     override fun getName() = "BackgroundNotifModule"
@@ -61,5 +62,27 @@ class BackgroundNotifModule(reactContext: ReactApplicationContext) : ReactContex
         // مثال: HTTP request با Authorization header
         
         Log.d("ARKA_RESULT", "✅ API call completed successfully")
+    }
+
+    @ReactMethod
+    fun startBackgroundService() {
+        try {
+            val intent = Intent(reactApplicationContext, TokenBackgroundService::class.java)
+            reactApplicationContext.startService(intent)
+            Log.i("ARKA_SERVICE", "✅ Background service started successfully")
+        } catch (e: Exception) {
+            Log.e("ARKA_SERVICE", "❌ Failed to start background service: ${e.message}")
+        }
+    }
+
+    @ReactMethod
+    fun stopBackgroundService() {
+        try {
+            val intent = Intent(reactApplicationContext, TokenBackgroundService::class.java)
+            reactApplicationContext.stopService(intent)
+            Log.i("ARKA_SERVICE", "🛑 Background service stopped")
+        } catch (e: Exception) {
+            Log.e("ARKA_SERVICE", "❌ Failed to stop background service: ${e.message}")
+        }
     }
 }
