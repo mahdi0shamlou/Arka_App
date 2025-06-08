@@ -1,7 +1,6 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   BackHandler,
-  Button,
   Dimensions,
   Keyboard,
   PermissionsAndroid,
@@ -18,7 +17,6 @@ import ErrorHandler from './components/ErrorHandler';
 import Loader from './components/Loader';
 import SplashScreen from './components/SplashScreen';
 import Web from './components/Web';
-import {TokenService} from './services/tokenService';
 
 const {BackgroundNotifModule} = NativeModules;
 
@@ -146,37 +144,6 @@ export default function HomeScreen() {
       }}>
       <StatusBar barStyle="light-content" backgroundColor="#1d4ed8" />
 
-      <Button
-        title="Save Token Now"
-        onPress={async () => {
-          try {
-            console.log('=== SAVING TOKEN ===');
-            await TokenService.saveTokens({
-              token:
-                'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.test_token_for_debug',
-            });
-            console.log('Token saved successfully!');
-
-            // بعد از save، بلافاصله check کن
-            const saved = await TokenService.getStoredTokens();
-            console.log('Immediately after save:', saved);
-          } catch (error) {
-            console.error('Error saving token:', error);
-          }
-        }}
-      />
-      <Button
-        title="Native Check"
-        onPress={() => BackgroundNotifModule.CreateRequest('test')}
-      />
-      <Button
-        title="Start Background Service"
-        onPress={() => BackgroundNotifModule.startBackgroundService()}
-      />
-      <Button
-        title="Stop Background Service"
-        onPress={() => BackgroundNotifModule.stopBackgroundService()}
-      />
       {hasError ? (
         <ErrorHandler setHasError={setHasError} setLoading={setLoading} />
       ) : (

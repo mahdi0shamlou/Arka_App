@@ -6,22 +6,27 @@ import android.os.IBinder
 import android.util.Log
 import kotlinx.coroutines.*
 import org.json.JSONObject
+import android.app.NotificationManager
+import android.app.NotificationChannel
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import okhttp3.*
+import java.io.IOException
 
 class TokenBackgroundService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var isRunning = false
+    private val httpClient = OkHttpClient()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d("TokenBackgroundService", "🚀 Background Service Started")
-        
         if (!isRunning) {
             isRunning = true
             startTokenChecking()
         }
         
-        return START_STICKY // Service رو دوباره راه‌اندازی کن اگه کشته شد
+        return START_STICKY
     }
 
     private fun startTokenChecking() {
@@ -29,10 +34,10 @@ class TokenBackgroundService : Service() {
             while (isRunning) {
                 try {
                     checkAndLogToken()
-                    delay(15000) // هر 15 ثانیه چک کن
+                    delay(20000) // هر 20 ثانیه چک کن
                 } catch (e: Exception) {
                     Log.e("TokenBackgroundService", "Error in background check: ${e.message}")
-                    delay(15000)
+                    delay(20000)
                 }
             }
         }
@@ -42,13 +47,10 @@ class TokenBackgroundService : Service() {
         try {
             val token = getTokenFromDatabase()
             if (token != null) {
-                Log.i("TOKEN_BACKGROUND", "✅ Token available: ${token.substring(0, 30)}...")
-                Log.i("TOKEN_BACKGROUND", "⏰ Check time: ${System.currentTimeMillis()}")
+                Log.i("TOKEN_BACKGROUND", "✅ Token available")
                 
-                // اینجا می‌تونی API call بزنی یا کار دیگه‌ای انجام بدی
-                performBackgroundTask(token)
-            } else {
-                Log.w("TOKEN_BACKGROUND", "❌ No token found in background check")
+                // درخواست HTTP به سرور
+                makeProfileRequest(token)
             }
         } catch (e: Exception) {
             Log.e("TOKEN_BACKGROUND", "Background token check failed: ${e.message}")
@@ -78,13 +80,92 @@ class TokenBackgroundService : Service() {
         }
     }
 
-    private fun performBackgroundTask(token: String) {
-        Log.d("TOKEN_BACKGROUND", "🔄 Performing background task with token")
-        // اینجا می‌تونی:
-        // - API call بزنی
-        // - Notification نشون بدی  
-        // - داده ذخیره کنی
-        // - هر کار دیگه‌ای انجام بدی
+    private fun sendTokenNotification(name: String? = null) {
+        try {
+            val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            val channelId = "token_channel"
+            
+            // ایجاد کانال نوتیفیکیشن برای Android 8+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    channelId,
+                    "Token Status",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                )
+                notificationManager.createNotificationChannel(channel)
+            }
+            
+            val notificationText = if (name != null) {
+                "خوش آمدید $name - Token فعال است"
+            } else {
+                "Token موجود است و فعال می‌باشد"
+            }
+            
+            val notification = NotificationCompat.Builder(this, channelId)
+                .setContentTitle("ArkaFile")
+                .setContentText(notificationText)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(notificationText))
+                .build()
+                
+            // استفاده از timestamp برای ایجاد ID منحصر بفرد
+            val notificationId = (System.currentTimeMillis() % Int.MAX_VALUE).toInt()
+            notificationManager.notify(notificationId, notification)
+            Log.d("TOKEN_BACKGROUND", "📱 Notification sent with name: $name")
+            
+        } catch (e: Exception) {
+            Log.e("TOKEN_BACKGROUND", "Failed to send notification: ${e.message}")
+        }
+    }
+
+    private fun makeProfileRequest(token: String) {
+        serviceScope.launch {
+            try {
+                val request = Request.Builder()
+                    .url("https://back.arkafile.info/Profile")
+                    .addHeader("Authorization", "Bearer $token")
+                    .build()
+
+                httpClient.newCall(request).enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: IOException) {
+                        Log.d("TOKEN_BACKGROUND", "❌ Profile request failed: ${e.message}")
+                        // درخواست ناموفق - هیچ کاری نمی‌کنیم
+                    }
+
+                    override fun onResponse(call: Call, response: Response) {
+                        response.use {
+                            if (response.isSuccessful) {
+                                try {
+                                    val responseBody = response.body?.string()
+                                    if (responseBody != null) {
+                                        val jsonResponse = JSONObject(responseBody)
+                                        val name = jsonResponse.optString("name", "کاربر")
+                                        
+                                        Log.d("TOKEN_BACKGROUND", "✅ Profile request successful - Name: $name")
+                                        // درخواست موفق - نوتیفیکیشن با name ارسال می‌کنیم
+                                        sendTokenNotification(name)
+                                    } else {
+                                        Log.d("TOKEN_BACKGROUND", "✅ Profile request successful but empty response")
+                                        sendTokenNotification()
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("TOKEN_BACKGROUND", "Error parsing response: ${e.message}")
+                                    sendTokenNotification()
+                                }
+                            } else {
+                                Log.d("TOKEN_BACKGROUND", "❌ Profile request failed with code: ${response.code}")
+                                // درخواست ناموفق - هیچ کاری نمی‌کنیم
+                            }
+                        }
+                    }
+                })
+                
+            } catch (e: Exception) {
+                Log.e("TOKEN_BACKGROUND", "Error making profile request: ${e.message}")
+            }
+        }
     }
 
     override fun onDestroy() {

@@ -53,9 +53,8 @@ class MainApplication : Application(), ReactApplication {
     try {
       val intent = Intent(this, TokenBackgroundService::class.java)
       startService(intent)
-      android.util.Log.i("MainApplication", "🚀 Token Background Service started automatically")
     } catch (e: Exception) {
-      android.util.Log.e("MainApplication", "❌ Failed to start Token Background Service: ${e.message}")
+      // Silent failure
     }
   }
 }
