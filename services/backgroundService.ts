@@ -10,7 +10,9 @@ export interface ApiResponse {
 
 export class BackgroundService {
   private static isRunning = false;
-  private static apiUrl = 'https://back.arkafile.info/Profile'; // URL پیش‌فرض - باید تغییر دهید
+  private static shouldStop = false;
+  private static currentTimeoutId: NodeJS.Timeout | null = null;
+  private static apiUrl = 'https://back.arkafile.info/Profile';
 
   /**
    * Set the API URL for background requests
@@ -27,51 +29,79 @@ export class BackgroundService {
   }
 
   /**
-   * Simple background task that runs every minute
+   * Single API check function
+   */
+  private static async performApiCheck(): Promise<void> {
+    try {
+      const token = await TokenService.getValidAccessToken();
+      
+      if (!token) {
+        return;
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      try {
+        const response = await fetch(this.apiUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          console.log('[BackgroundService] API success');
+          PushNotificationService.showSuccessNotification('درخواست API موفقیت‌آمیز بود!');
+        }
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        console.log('[BackgroundService] Request error');
+      }
+    } catch (error) {
+      console.log('[BackgroundService] Check error');
+    }
+  }
+
+  /**
+   * Schedule next API check
+   */
+  private static scheduleNextCheck(): void {
+    if (this.shouldStop) {
+      return;
+    }
+
+    this.currentTimeoutId = setTimeout(async () => {
+      if (!this.shouldStop) {
+        await this.performApiCheck();
+        this.scheduleNextCheck();
+      }
+    }, 60000); // 1 minute
+  }
+
+  /**
+   * Improved background task
    */
   private static async backgroundTask(): Promise<void> {
-    console.log('[BackgroundService] Background task started - checking every minute');
+    console.log('[BackgroundService] Service started');
+    this.shouldStop = false;
     
-    // Keep running and check every minute
-    while (true) {
-      try {
-        // Check if token exists
-        const token = await TokenService.getValidAccessToken();
-        
-        if (token) {
-          try {
-            // Make API request with token and timeout
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-            const response = await fetch('https://back.arkafile.info/Profile', {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-              },
-              signal: controller.signal,
-            });
-
-            clearTimeout(timeoutId);
-
-            if (response.ok) {
-              console.log('[BackgroundService] API request successful');
-              PushNotificationService.showSuccessNotification('درخواست API موفقیت‌آمیز بود!');
-            } else {
-              console.log(`[BackgroundService] API request failed: ${response.status}`);
-            }
-          } catch (fetchError) {
-            console.log('[BackgroundService] Request error:', fetchError);
-          }
-        }
-      } catch (error) {
-        console.log('[BackgroundService] Error:', error);
-      }
-      
-      // Wait 1 minute before next check
-      await new Promise(resolve => setTimeout(resolve, 60000));
+    // Perform first check immediately
+    await this.performApiCheck();
+    
+    // Schedule subsequent checks
+    this.scheduleNextCheck();
+    
+    // Keep the background task alive
+    while (!this.shouldStop) {
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
+    
+    console.log('[BackgroundService] Background task ended');
   }
 
   /**
@@ -79,7 +109,7 @@ export class BackgroundService {
    */
   static async start(apiUrl?: string): Promise<void> {
     if (this.isRunning) {
-      console.log('[BackgroundService] Service is already running');
+      console.log('[BackgroundService] Already running');
       return;
     }
 
@@ -96,21 +126,12 @@ export class BackgroundService {
           name: 'ic_launcher',
           type: 'mipmap',
         },
-        linkingURI: 'arkafile://background',
-        parameters: {
-          delay: 1000,
-        },
-        progressBar: {
-          max: 100,
-          value: 0,
-          indeterminate: false,
-        }
       };
 
       await BackgroundActions.start(this.backgroundTask, options);
       this.isRunning = true;
       
-      console.log('[BackgroundService] Started - checking every minute');
+      console.log('[BackgroundService] Started successfully');
     } catch (error) {
       console.error('[BackgroundService] Start error:', error);
       this.isRunning = false;
@@ -122,11 +143,18 @@ export class BackgroundService {
    */
   static async stop(): Promise<void> {
     if (!this.isRunning) {
-      console.log('[BackgroundService] Service is not running');
       return;
     }
 
     try {
+      this.shouldStop = true;
+      
+      // Clear any pending timeout
+      if (this.currentTimeoutId) {
+        clearTimeout(this.currentTimeoutId);
+        this.currentTimeoutId = null;
+      }
+
       await BackgroundActions.stop();
       this.isRunning = false;
       console.log('[BackgroundService] Stopped');

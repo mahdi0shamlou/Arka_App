@@ -7,17 +7,21 @@ import {
   StatusBar,
   ToastAndroid,
   PermissionsAndroid,
+  Button,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
 import PushNotification from 'react-native-push-notification';
 
-import {TokenService} from './services/tokenService';
+import {NativeModules} from 'react-native';
 import {BackgroundService} from './services/backgroundService';
 import SplashScreen from './components/SplashScreen';
 import ErrorHandler from './components/ErrorHandler';
 import Loader from './components/Loader';
 import Web from './components/Web';
+
+
+const {BackgroundNotifModule} = NativeModules
 
 
 PushNotification.configure({
@@ -171,7 +175,23 @@ export default function HomeScreen() {
         barStyle="light-content"
         backgroundColor="#1d4ed8"
       />
-
+     <Button 
+  title="Create Request" 
+  onPress={() => {
+    try {
+      console.log('Button pressed, calling BackgroundNotifModule...');
+      if (BackgroundNotifModule && BackgroundNotifModule.CreateRequest) {
+        BackgroundNotifModule.CreateRequest('1234567890');
+        console.log('Method called successfully');
+      } else {
+        console.log('BackgroundNotifModule or CreateRequest method not found');
+        console.log('Available methods:', Object.keys(BackgroundNotifModule || {}));
+      }
+    } catch (error) {
+      console.error('Error calling BackgroundNotifModule:', error);
+    }
+  }} 
+/>
       {hasError ? (
         <ErrorHandler setHasError={setHasError} setLoading={setLoading} />
       ) : (
