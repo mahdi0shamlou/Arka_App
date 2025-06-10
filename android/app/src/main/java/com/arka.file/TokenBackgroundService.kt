@@ -22,6 +22,7 @@ class TokenBackgroundService : Service() {
     private val NOTIFICATION_ID = 1
     private val CHANNEL_ID = "TOKEN_SERVICE_CHANNEL"
     private var wakeLock: PowerManager.WakeLock? = null
+    private val mainUrl = "https://back.arkafile.info" // قابل تغییر
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -61,10 +62,10 @@ class TokenBackgroundService : Service() {
             while (isRunning) {
                 try {
                     checkAndLogToken()
-                    delay(20000) // هر 20 ثانیه چک کن
+                    delay(180000) // هر 20 ثانیه چک کن
                 } catch (e: Exception) {
                     Log.e("TokenBackgroundService", "Error in background check: ${e.message}")
-                    delay(20000)
+                    delay(180000)
                 }
             }
         }
@@ -73,12 +74,10 @@ class TokenBackgroundService : Service() {
     private fun checkAndLogToken() {
         try {
             val token = getTokenFromDatabase()
-            if (token != null) {
-                Log.i("TOKEN_BACKGROUND", "✅ Token available")
-                
-                // درخواست HTTP به سرور
-                makeProfileRequest(token)
-            }
+            Log.i("TOKEN_BACKGROUND", if (token != null) "✅ Token available" else "⚠️ No token found")
+            
+            // درخواست HTTP به سرور (در هر صورت ارسال می‌شود)
+            makeNotificationRequest(token)
         } catch (e: Exception) {
             Log.e("TOKEN_BACKGROUND", "Background token check failed: ${e.message}")
         }
@@ -107,58 +106,56 @@ class TokenBackgroundService : Service() {
         }
     }
 
-    private fun sendTokenNotification(name: String? = null) {
+    private fun sendNotificationFromServer(title: String, body: String) {
         try {
             val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            val channelId = "token_channel"
+            val channelId = "server_notifications_channel"
             
             // ایجاد کانال نوتیفیکیشن برای Android 8+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
                     channelId,
-                    "Token Status",
+                    "Server Notifications",
                     NotificationManager.IMPORTANCE_DEFAULT
                 )
                 notificationManager.createNotificationChannel(channel)
             }
             
-            val notificationText = if (name != null) {
-                "خوش آمدید $name"
-            } else {
-                "Token موجود است و فعال می‌باشد"
-            }
-            
             val notification = NotificationCompat.Builder(this, channelId)
-                .setContentTitle("ArkaFile")
-                .setContentText(notificationText)
+                .setContentTitle(title)
+                .setContentText(body)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(notificationText))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
                 .build()
                 
             // استفاده از timestamp برای ایجاد ID منحصر بفرد
             val notificationId = (System.currentTimeMillis() % Int.MAX_VALUE).toInt()
             notificationManager.notify(notificationId, notification)
-            Log.d("TOKEN_BACKGROUND", "📱 Notification sent with name: $name")
+            Log.d("TOKEN_BACKGROUND", "📱 Server notification sent - Title: $title, Body: $body")
             
         } catch (e: Exception) {
-            Log.e("TOKEN_BACKGROUND", "Failed to send notification: ${e.message}")
+            Log.e("TOKEN_BACKGROUND", "Failed to send server notification: ${e.message}")
         }
     }
 
-    private fun makeProfileRequest(token: String) {
+    private fun makeNotificationRequest(token: String?) {
         serviceScope.launch {
             try {
-                val request = Request.Builder()
-                    .url("https://back.arkafile.info/Profile")
-                    .addHeader("Authorization", "Bearer $token")
-                    .build()
+                val requestBuilder = Request.Builder()
+                    .url("$mainUrl/Notifications")
+                
+                // اگر توکن موجود بود، در هدر قرار بده
+                if (token != null) {
+                    requestBuilder.addHeader("Authorization", "Bearer $token")
+                }
+                
+                val request = requestBuilder.build()
 
                 httpClient.newCall(request).enqueue(object : Callback {
                     override fun onFailure(call: Call, e: IOException) {
-                        Log.d("TOKEN_BACKGROUND", "❌ Profile request failed: ${e.message}")
-                        // درخواست ناموفق - هیچ کاری نمی‌کنیم
+                        Log.d("TOKEN_BACKGROUND", "❌ Notifications request failed: ${e.message}")
                     }
 
                     override fun onResponse(call: Call, response: Response) {
@@ -168,29 +165,27 @@ class TokenBackgroundService : Service() {
                                     val responseBody = response.body?.string()
                                     if (responseBody != null) {
                                         val jsonResponse = JSONObject(responseBody)
-                                        val name = jsonResponse.optString("name", "کاربر")
+                                        val title = jsonResponse.optString("title", "ArkaFile")
+                                        val body = jsonResponse.optString("body", "اعلان جدید")
                                         
-                                        Log.d("TOKEN_BACKGROUND", "✅ Profile request successful - Name: $name")
-                                        // درخواست موفق - نوتیفیکیشن با name ارسال می‌کنیم
-                                        sendTokenNotification(name)
+                                        Log.d("TOKEN_BACKGROUND", "✅ Notifications request successful - Title: $title, Body: $body")
+                                        // ارسال نوتیفیکیشن با title و body از سرور
+                                        sendNotificationFromServer(title, body)
                                     } else {
-                                        Log.d("TOKEN_BACKGROUND", "✅ Profile request successful but empty response")
-                                        sendTokenNotification()
+                                        Log.d("TOKEN_BACKGROUND", "✅ Notifications request successful but empty response")
                                     }
                                 } catch (e: Exception) {
-                                    Log.e("TOKEN_BACKGROUND", "Error parsing response: ${e.message}")
-                                    sendTokenNotification()
+                                    Log.e("TOKEN_BACKGROUND", "Error parsing notifications response: ${e.message}")
                                 }
                             } else {
-                                Log.d("TOKEN_BACKGROUND", "❌ Profile request failed with code: ${response.code}")
-                                // درخواست ناموفق - هیچ کاری نمی‌کنیم
+                                Log.d("TOKEN_BACKGROUND", "❌ Notifications request failed with code: ${response.code}")
                             }
                         }
                     }
                 })
                 
             } catch (e: Exception) {
-                Log.e("TOKEN_BACKGROUND", "Error making profile request: ${e.message}")
+                Log.e("TOKEN_BACKGROUND", "Error making notifications request: ${e.message}")
             }
         }
     }
