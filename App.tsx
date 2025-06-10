@@ -11,14 +11,11 @@ import {
 import PushNotification from 'react-native-push-notification';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
-
-import {NativeModules} from 'react-native';
 import ErrorHandler from './components/ErrorHandler';
 import Loader from './components/Loader';
 import SplashScreen from './components/SplashScreen';
 import Web from './components/Web';
 
-const {BackgroundNotifModule} = NativeModules;
 
 PushNotification.configure({
   onNotification: function (notification) {
