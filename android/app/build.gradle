@@ -93,9 +93,9 @@ android {
         }
     }
     
-    namespace "com.arka.file"
+    namespace "com.arkafile"
     defaultConfig {
-        applicationId "com.arka.file"
+        applicationId "com.arkafile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

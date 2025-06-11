@@ -1,4 +1,4 @@
-package com.arka.file
+package com.arkafile
 
 import android.content.BroadcastReceiver
 import android.content.Context

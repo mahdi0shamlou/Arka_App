@@ -1,4 +1,4 @@
-package com.arka.file; // replace your-apps-package-name with your app's package name
+package com.arkafile; // replace your-apps-package-name with your app's package name
 import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContext

@@ -1,4 +1,4 @@
-package com.arka.file
+package com.arkafile
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

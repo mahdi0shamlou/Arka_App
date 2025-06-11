@@ -25,9 +25,9 @@
 #-renamesourcefileattribute SourceFile
 
 # Keep our background service classes
--keep class com.arka.file.TokenBackgroundService { *; }
--keep class com.arka.file.BootReceiver { *; }
--keep class com.arka.file.BackgroundNotifModule { *; }
+-keep class com.arkafile.TokenBackgroundService { *; }
+-keep class com.arkafile.BootReceiver { *; }
+-keep class com.arkafile.BackgroundNotifModule { *; }
 
 # Keep service related classes
 -keep class * extends android.app.Service
