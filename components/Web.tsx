@@ -1,7 +1,7 @@
+import CookieManager from '@react-native-cookies/cookies';
 import React, {useEffect} from 'react';
 import {Linking} from 'react-native';
 import WebView from 'react-native-webview';
-import CookieManager from '@react-native-cookies/cookies';
 import {TokenService} from '../services/tokenService';
 
 interface IProps {
@@ -22,24 +22,48 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
 
   const handleNavigation = (event: any) => {
     const url = event.url;
+    console.log('🔗 Navigation attempt to:', url);
+
+    // اگر لینک تلفن است، در اپ دیگری باز کن
     if (url.startsWith('tel:')) {
       Linking.openURL(url);
       return false;
     }
+
+    // اگر لینک ایمیل است، در اپ دیگری باز کن
+    if (url.startsWith('mailto:')) {
+      Linking.openURL(url);
+      return false;
+    }
+
+    // لیست دامنه‌های مجاز که باید در WebView باز شوند
+    const allowedDomains = [
+      'arkafile.info',
+      'www.arkafile.info',
+      'back.arkafile.info',
+    ];
+
+    // چک کن که آیا URL مربوط به دامنه‌های مجاز است یا نه
+    const isAllowedDomain = allowedDomains.some(domain => url.includes(domain));
+
+    // اگر دامنه مجاز نیست، در مرورگر خارجی باز کن
+    if (!isAllowedDomain) {
+      Linking.openURL(url);
+      return false;
+    }
+
+    // بقیه لینک‌ها (مربوط به سایت اصلی) در WebView باز شوند
     return true;
   };
 
   const checkAndSaveTokenFromCookies = async () => {
     try {
-      const domains = [
-        'https://www.arkafile.info',
-        'https://arkafile.info'
-      ];
-      
+      const domains = ['https://www.arkafile.info', 'https://arkafile.info'];
+
       for (const domain of domains) {
         try {
           const cookies = await CookieManager.get(domain);
-          
+
           if (cookies.token && cookies.token.value) {
             await TokenService.saveTokens({token: cookies.token.value});
             return;
@@ -55,7 +79,7 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
 
   const handleLoadEnd = async () => {
     setLoading(false);
-    
+
     // Check and save token from cookies
     await checkAndSaveTokenFromCookies();
   };
@@ -63,13 +87,13 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   const handleMessage = async (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      
+
       if (data.type === 'CHECK_COOKIES') {
         setTimeout(async () => {
           await checkAndSaveTokenFromCookies();
         }, 2000);
       }
-      
+
       if (data.type === 'LOGOUT') {
         await TokenService.clearTokens();
         await TokenService.clearCookies();
