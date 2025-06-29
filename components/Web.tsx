@@ -1,8 +1,10 @@
 import CookieManager from '@react-native-cookies/cookies';
 import React, {useEffect} from 'react';
-import {Linking} from 'react-native';
+import {Linking, NativeModules} from 'react-native';
 import WebView from 'react-native-webview';
 import {TokenService} from '../services/tokenService';
+
+const {BackgroundNotifModule} = NativeModules;
 
 interface IProps {
   setHasError: React.Dispatch<React.SetStateAction<boolean>>;
@@ -12,9 +14,32 @@ interface IProps {
 }
 
 function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
+  const [initialUrl, setInitialUrl] = React.useState(
+    'https://www.arkafile.org/dashboard',
+  );
+
   useEffect(() => {
     const initializeTokens = async () => {
+      // ابتدا چک کنیم کاربر token دارد یا نه
+      const existingToken = await TokenService.getValidAccessToken();
+
+      if (existingToken) {
+        console.log('✅ Token exists, going to dashboard');
+        setInitialUrl('https://www.arkafile.org/dashboard');
+      } else {
+        console.log('⚠️ No token found, going to login');
+        setInitialUrl('https://www.arkafile.org/login');
+      }
+
       await checkAndSaveTokenFromCookies();
+
+      // شروع SSE service پس از بارگذاری اولیه
+      try {
+        await BackgroundNotifModule?.StartSSEService();
+        console.log('🚀 SSE Service started');
+      } catch (error) {
+        console.log('⚠️ SSE Service start failed:', error);
+      }
     };
 
     initializeTokens();
@@ -36,29 +61,33 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       return false;
     }
 
-    // لیست دامنه‌های مجاز که باید در WebView باز شوند
-    const allowedDomains = [
-      'arkafile.info',
-      'www.arkafile.info',
-      'back.arkafile.info',
-    ];
+    // لیست دامنه‌های مجاز که باید در WebView باز شوند (فقط دو دامنه اصلی)
+    const allowedDomains = ['arkafile.org', 'arkafile.info'];
 
     // چک کن که آیا URL مربوط به دامنه‌های مجاز است یا نه
     const isAllowedDomain = allowedDomains.some(domain => url.includes(domain));
 
+    console.log('🔍 URL Check:', {
+      url,
+      isAllowed: isAllowedDomain,
+      allowedDomains: allowedDomains,
+    });
+
     // اگر دامنه مجاز نیست، در مرورگر خارجی باز کن
     if (!isAllowedDomain) {
+      console.log('❌ Opening in external browser:', url);
       Linking.openURL(url);
       return false;
     }
 
+    console.log('✅ Allowing in WebView:', url);
     // بقیه لینک‌ها (مربوط به سایت اصلی) در WebView باز شوند
     return true;
   };
 
   const checkAndSaveTokenFromCookies = async () => {
     try {
-      const domains = ['https://www.arkafile.info', 'https://arkafile.info'];
+      const domains = ['https://www.arkafile.org', 'https://www.arkafile.info'];
 
       for (const domain of domains) {
         try {
@@ -66,6 +95,15 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
 
           if (cookies.token && cookies.token.value) {
             await TokenService.saveTokens({token: cookies.token.value});
+
+            // راه‌اندازی مجدد SSE connection با توکن جدید
+            try {
+              await BackgroundNotifModule?.RestartSSEConnection();
+              console.log('🔄 SSE Connection restarted with new token');
+            } catch (error) {
+              console.log('⚠️ SSE restart failed:', error);
+            }
+
             return;
           }
         } catch (err) {
@@ -82,6 +120,13 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
 
     // Check and save token from cookies
     await checkAndSaveTokenFromCookies();
+
+    // اطمینان از اینکه SSE service در حال اجرا است
+    try {
+      await BackgroundNotifModule?.CheckTokenAndConnect();
+    } catch (error) {
+      console.log('⚠️ SSE token check failed:', error);
+    }
   };
 
   const handleMessage = async (event: any) => {
@@ -97,6 +142,14 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       if (data.type === 'LOGOUT') {
         await TokenService.clearTokens();
         await TokenService.clearCookies();
+
+        // توقف SSE service هنگام logout
+        try {
+          await BackgroundNotifModule?.StopSSEService();
+          console.log('🛑 SSE Service stopped on logout');
+        } catch (error) {
+          console.log('⚠️ SSE stop failed on logout:', error);
+        }
       }
     } catch (error) {
       // Silent error handling for non-JSON messages
@@ -105,7 +158,7 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
 
   return (
     <WebView
-      source={{uri: 'https://www.arkafile.info/dashboard'}}
+      source={{uri: initialUrl}}
       ref={webViewRef}
       onLoadProgress={event => {
         setCanGoBack(event.nativeEvent.canGoBack);

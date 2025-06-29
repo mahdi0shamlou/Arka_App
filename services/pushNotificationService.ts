@@ -1,8 +1,8 @@
 import PushNotification, {
-  LocalNotificationOptions,
-  ScheduledNotificationOptions,
-  PushNotificationPermissions,
   ChannelObject,
+  LocalNotificationOptions,
+  PushNotificationPermissions,
+  ScheduledNotificationOptions,
 } from 'react-native-push-notification';
 
 export interface NotificationData {
@@ -16,7 +16,7 @@ export class PushNotificationService {
   static showLocalNotification(
     title: string,
     message: string,
-    data?: NotificationData
+    data?: NotificationData,
   ): void {
     const options: LocalNotificationOptions = {
       title,
@@ -42,7 +42,7 @@ export class PushNotificationService {
     title: string,
     message: string,
     date: Date,
-    data?: NotificationData
+    data?: NotificationData,
   ): void {
     const options: ScheduledNotificationOptions = {
       title,
@@ -65,7 +65,9 @@ export class PushNotificationService {
   /**
    * Show a success notification
    */
-  static showSuccessNotification(message: string = 'عملیات با موفقیت انجام شد!'): void {
+  static showSuccessNotification(
+    message: string = 'عملیات با موفقیت انجام شد!',
+  ): void {
     this.showLocalNotification('ArkaFile', message, {
       type: 'success',
       timestamp: Date.now(),
@@ -103,7 +105,7 @@ export class PushNotificationService {
    * Cancel a specific notification by ID
    */
   static cancelNotification(id: string): void {
-    PushNotification.cancelLocalNotifications({ id });
+    PushNotification.cancelLocalNotifications({id});
   }
 
   /**
@@ -116,7 +118,9 @@ export class PushNotificationService {
   /**
    * Check current notification permissions
    */
-  static checkPermissions(callback: (permissions: PushNotificationPermissions) => void): void {
+  static checkPermissions(
+    callback: (permissions: PushNotificationPermissions) => void,
+  ): void {
     PushNotification.checkPermissions(callback);
   }
 
@@ -134,7 +138,7 @@ export class PushNotificationService {
     channelId: string,
     channelName: string,
     channelDescription?: string,
-    callback?: (created: boolean) => void
+    callback?: (created: boolean) => void,
   ): void {
     const channel: ChannelObject = {
       channelId,
@@ -159,7 +163,10 @@ export class PushNotificationService {
   /**
    * Check if a channel exists (Android)
    */
-  static channelExists(channelId: string, callback: (exists: boolean) => void): void {
+  static channelExists(
+    channelId: string,
+    callback: (exists: boolean) => void,
+  ): void {
     PushNotification.channelExists(channelId, callback);
   }
 
@@ -173,7 +180,9 @@ export class PushNotificationService {
   /**
    * Get application badge number (iOS)
    */
-  static getApplicationIconBadgeNumber(callback: (badgeCount: number) => void): void {
+  static getApplicationIconBadgeNumber(
+    callback: (badgeCount: number) => void,
+  ): void {
     PushNotification.getApplicationIconBadgeNumber(callback);
   }
 
@@ -187,14 +196,18 @@ export class PushNotificationService {
   /**
    * Get delivered notifications
    */
-  static getDeliveredNotifications(callback: (notifications: object[]) => void): void {
+  static getDeliveredNotifications(
+    callback: (notifications: object[]) => void,
+  ): void {
     PushNotification.getDeliveredNotifications(callback);
   }
 
   /**
    * Get scheduled notifications
    */
-  static getScheduledLocalNotifications(callback: (notifications: object[]) => void): void {
+  static getScheduledLocalNotifications(
+    callback: (notifications: object[]) => void,
+  ): void {
     PushNotification.getScheduledLocalNotifications(callback);
   }
-} 
+}

@@ -138,6 +138,9 @@ dependencies {
     // OkHttp for HTTP requests
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
+     // OkHttp EventSource for SSE
+    implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
+
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {

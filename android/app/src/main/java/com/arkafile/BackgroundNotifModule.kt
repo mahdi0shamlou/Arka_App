@@ -11,23 +11,58 @@ class BackgroundNotifModule(reactContext: ReactApplicationContext) : ReactContex
     override fun getName() = "BackgroundNotifModule"
 
     @ReactMethod
-    fun CreateRequest(customData: String) {
-        Log.e("ARKA_RESULT", "===========================================")
+    fun RestartSSEConnection() {
+        Log.d("BackgroundNotifModule", "🔄 Restarting SSE connection...")
+        try {
+            // متوقف کردن سرویس فعلی
+            val stopIntent = Intent(reactApplicationContext, TokenBackgroundService::class.java)
+            reactApplicationContext.stopService(stopIntent)
+            
+            // شروع مجدد سرویس
+            val startIntent = Intent(reactApplicationContext, TokenBackgroundService::class.java)
+            reactApplicationContext.startService(startIntent)
+            
+            Log.d("BackgroundNotifModule", "✅ SSE service restarted successfully")
+        } catch (e: Exception) {
+            Log.e("BackgroundNotifModule", "❌ Failed to restart SSE service: ${e.message}")
+        }
+    }
+
+    @ReactMethod
+    fun CheckTokenAndConnect() {
+        Log.d("BackgroundNotifModule", "🔍 Checking token and connecting to SSE...")
         
         val token = getTokenFromDatabase()
         if (token != null) {
-            Log.e("ARKA_RESULT", "✅ SUCCESS! Token retrieved from RKStorage")
-            Log.e("ARKA_RESULT", "Token: ${token.substring(0, 50)}...")
-            
-            // اینجا می‌تونی با token کار کنی
-            // مثل ارسال API request، ذخیره در native storage و...
-            performApiCall(token, customData)
-            
+            Log.d("BackgroundNotifModule", "✅ Token found, restarting SSE connection")
+            RestartSSEConnection()
         } else {
-            Log.e("ARKA_RESULT", "❌ Failed to retrieve token from database")
+            Log.w("BackgroundNotifModule", "⚠️ No token found, cannot connect to SSE")
         }
-        
-        Log.e("ARKA_RESULT", "===========================================")
+    }
+
+    @ReactMethod
+    fun StartSSEService() {
+        Log.d("BackgroundNotifModule", "🚀 Starting SSE service...")
+        try {
+            val intent = Intent(reactApplicationContext, TokenBackgroundService::class.java)
+            reactApplicationContext.startService(intent)
+            Log.d("BackgroundNotifModule", "✅ SSE service started")
+        } catch (e: Exception) {
+            Log.e("BackgroundNotifModule", "❌ Failed to start SSE service: ${e.message}")
+        }
+    }
+
+    @ReactMethod
+    fun StopSSEService() {
+        Log.d("BackgroundNotifModule", "🛑 Stopping SSE service...")
+        try {
+            val intent = Intent(reactApplicationContext, TokenBackgroundService::class.java)
+            reactApplicationContext.stopService(intent)
+            Log.d("BackgroundNotifModule", "✅ SSE service stopped")
+        } catch (e: Exception) {
+            Log.e("BackgroundNotifModule", "❌ Failed to stop SSE service: ${e.message}")
+        }
     }
 
     private fun getTokenFromDatabase(): String? {
@@ -49,20 +84,8 @@ class BackgroundNotifModule(reactContext: ReactApplicationContext) : ReactContex
             db.close()
             null
         } catch (e: Exception) {
-            Log.e("ARKA_RESULT", "Error reading token from database: ${e.message}")
+            Log.e("BackgroundNotifModule", "Error reading token from database: ${e.message}")
             null
         }
     }
-
-    private fun performApiCall(token: String, customData: String) {
-        Log.d("ARKA_RESULT", "🚀 Performing API call with token")
-        Log.d("ARKA_RESULT", "Custom data: $customData")
-        
-        // اینجا می‌تونی API call بزنی
-        // مثال: HTTP request با Authorization header
-        
-        Log.d("ARKA_RESULT", "✅ API call completed successfully")
-    }
-
-
 }
