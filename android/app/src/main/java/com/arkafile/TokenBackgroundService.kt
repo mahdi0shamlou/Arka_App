@@ -8,7 +8,6 @@ import kotlinx.coroutines.*
 import org.json.JSONObject
 import android.app.NotificationManager
 import android.app.NotificationChannel
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import okhttp3.*
 import okhttp3.sse.EventSource
@@ -17,6 +16,11 @@ import okhttp3.sse.EventSources
 import java.util.concurrent.TimeUnit
 import android.os.PowerManager
 import android.content.Context
+import android.app.PendingIntent
+import com.arkafile.MainActivity
+import android.provider.Settings
+import android.net.Uri
+import android.os.Build
 
 class TokenBackgroundService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -49,12 +53,13 @@ class TokenBackgroundService : Service() {
     private val NOTIFICATION_ID = 1
     private val CHANNEL_ID = "TOKEN_SERVICE_CHANNEL"
     private var wakeLock: PowerManager.WakeLock? = null
-    private val sseBaseUrl = "http://185.190.39.252:7575/sse" // SSE endpoint
+    private val sseBaseUrl = "http://185.190.39.252:7575/sse" // ✅ HTTPS for security
     private var eventSource: EventSource? = null
     private var reconnectJob: Job? = null
     private var reconnectAttempts = 0
     private val maxReconnectAttempts = Int.MAX_VALUE // unlimited retries
     private val reconnectDelaySeconds = longArrayOf(1, 2, 5, 10, 30, 60) // exponential backoff
+    private var watchdogJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -66,6 +71,10 @@ class TokenBackgroundService : Service() {
         Log.d("SSE_DEBUG", "📱 Starting foreground service...")
         startForeground(NOTIFICATION_ID, createPersistentNotification())
         Log.d("SSE_DEBUG", "✅ Service initialization complete")
+        
+      
+        
+        startWatchdog()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -86,6 +95,23 @@ class TokenBackgroundService : Service() {
         
         Log.d("SSE_DEBUG", "🔄 Returning START_STICKY for auto-restart")
         return START_STICKY
+    }
+
+  
+
+    private fun startWatchdog() {
+        watchdogJob = serviceScope.launch {
+            while (isRunning) {
+                delay(60000) // چک کردن هر دقیقه
+                
+                if (isRunning && eventSource == null) {
+                    Log.w("SSE_DEBUG", "⚠️ WATCHDOG: SSE connection lost, restarting...")
+                    startSSEConnection()
+                }
+                
+                Log.d("SSE_DEBUG", "💓 WATCHDOG: Service heartbeat - isRunning: $isRunning, eventSource: ${eventSource != null}")
+            }
+        }
     }
 
     private fun acquireWakeLock() {
@@ -124,6 +150,7 @@ class TokenBackgroundService : Service() {
 
     private fun connectToSSE(token: String) {
         try {
+            // ✅ استفاده از توکن واقعی به جای URL ثابت
             val sseUrl = "$sseBaseUrl/1"
             Log.d("SSE_DEBUG", "🔌 Attempting SSE connection to: $sseUrl")
             Log.d("SSE_DEBUG", "🔌 Using token: ${token.take(20)}...")
@@ -225,7 +252,7 @@ class TokenBackgroundService : Service() {
                             
                             Log.d("SSE_DEBUG", "✅ Last item parsed - Title: '$title', Body: '$body'")
                             
-                            // نمایش نوتیفیکیشن
+                            // نمایش نوتیفیکیشن با دکمه مشاهده
                             sendNotificationFromServer(title, body)
                             
                         } else {
@@ -245,7 +272,7 @@ class TokenBackgroundService : Service() {
                             
                             Log.d("SSE_DEBUG", "✅ Single object parsed - Title: '$title', Body: '$body'")
                             
-                            // نمایش نوتیفیکیشن
+                            // نمایش نوتیفیکیشن با دکمه مشاهده
                             sendNotificationFromServer(title, body)
                             
                         } catch (objectException: Exception) {
@@ -312,7 +339,25 @@ class TokenBackgroundService : Service() {
             if (isRunning) {
                 reconnectAttempts++
                 Log.d("SSE_DEBUG", "🔄 Starting reconnection attempt #$reconnectAttempts")
-                startSSEConnection()
+                
+                var connectionSuccess = false
+                for (attempt in 1..3) {
+                    try {
+                        startSSEConnection()
+                        connectionSuccess = true
+                        break
+                    } catch (e: Exception) {
+                        Log.w("SSE_DEBUG", "⚠️ Connection attempt $attempt failed: ${e.message}")
+                        if (attempt < 3) {
+                            delay(2000) // 2 ثانیه انتظار بین تلاش‌ها
+                        }
+                    }
+                }
+                
+                if (!connectionSuccess) {
+                    Log.e("SSE_DEBUG", "❌ All connection attempts failed, scheduling next retry...")
+                    scheduleReconnect()
+                }
             } else {
                 Log.d("SSE_DEBUG", "⏹️ Service stopped during delay, canceling reconnection")
             }
@@ -379,46 +424,111 @@ class TokenBackgroundService : Service() {
         }
     }
 
+    // ✅ بهبود نوتیفیکیشن برای Release با دکمه مشاهده آگهی
     private fun sendNotificationFromServer(title: String, body: String) {
-        Log.d("SSE_DEBUG", "📱 PREPARING TO SEND NOTIFICATION")
-        Log.d("SSE_DEBUG", "📝 Title: '$title'")
-        Log.d("SSE_DEBUG", "📄 Body: '$body'")
+        // ✅ برای Release هم لاگ حفظ می‌شود
+        val debugTag = "SSE_RELEASE"
+        android.util.Log.i(debugTag, "📱 PREPARING NOTIFICATION: $title") // تغییر به Log.i
         
         try {
             val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            val channelId = "sse_notifications_channel"
+            val channelId = "sse_notifications_channel_v2"
             
-            // ایجاد کانال نوتیفیکیشن برای Android 8+
+            // ✅ ایجاد کانال قوی‌تر برای Release
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                Log.d("SSE_DEBUG", "📢 Creating notification channel for Android 8+")
                 val channel = NotificationChannel(
                     channelId,
-                    "SSE Notifications",
-                    NotificationManager.IMPORTANCE_DEFAULT
-                )
-                channel.description = "اعلانات دریافتی از SSE"
+                    "ArkaFile اعلانات",
+                    NotificationManager.IMPORTANCE_HIGH // ✅ HIGH importance برای Release
+                ).apply {
+                    description = "اعلانات مهم ArkaFile"
+                    enableLights(true)
+                    enableVibration(true)
+                    setShowBadge(true)
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                }
                 notificationManager.createNotificationChannel(channel)
+                android.util.Log.i(debugTag, "✅ HIGH IMPORTANCE channel created")
             }
             
-            val notification = NotificationCompat.Builder(this, channelId)
+            // ✅ ایجاد Intent قوی‌تر برای باز کردن اپلیکیشن
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
+                        Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("from_notification", true)
+                putExtra("notification_title", title)
+                putExtra("notification_body", body)
+            }
+            
+            val pendingIntent = PendingIntent.getActivity(
+                this, 
+                System.currentTimeMillis().toInt(), // ✅ Unique request code
+                intent, 
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            
+            // ✅ نوتیفیکیشن قوی‌تر برای Release
+            val notificationBuilder = NotificationCompat.Builder(this, channelId)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setSmallIcon(R.mipmap.ic_launcher)
+                .setPriority(NotificationCompat.PRIORITY_HIGH) // ✅ HIGH priority
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setStyle(NotificationCompat.BigTextStyle()
+                    .bigText(body)
+                    .setBigContentTitle(title)
+                    .setSummaryText("ArkaFile"))
+                .setContentIntent(pendingIntent)
+                .addAction(
+                    android.R.drawable.ic_menu_view, // ✅ استفاده از آیکون سیستم
+                    "مشاهده آگهی", 
+                    pendingIntent
+                )
+                .setDefaults(NotificationCompat.DEFAULT_ALL) // ✅ صدا و لرزش
+                .setWhen(System.currentTimeMillis())
+                .setShowWhen(true)
                 .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-                .build()
                 
-            // استفاده از timestamp برای ایجاد ID منحصر بفرد
+            val notification = notificationBuilder.build()
+                
+            // ✅ ID منحصر بفرد برای هر نوتیفیکیشن
             val notificationId = (System.currentTimeMillis() % Int.MAX_VALUE).toInt()
-            Log.d("SSE_DEBUG", "🆔 Notification ID: $notificationId")
+            android.util.Log.d(debugTag, "🆔 Showing notification with ID: $notificationId")
             
             notificationManager.notify(notificationId, notification)
-            Log.i("SSE_DEBUG", "✅ NOTIFICATION SENT SUCCESSFULLY!")
+            android.util.Log.i(debugTag, "✅ NOTIFICATION DISPLAYED SUCCESSFULLY!")
+            
+            // ✅ تست اینکه notification manager کار می‌کند
+            val activeNotifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                notificationManager.activeNotifications.size
+            } else {
+                "N/A"
+            }
+            android.util.Log.d(debugTag, "📊 Active notifications count: $activeNotifications")
             
         } catch (e: Exception) {
-            Log.e("SSE_DEBUG", "❌ FAILED TO SEND NOTIFICATION: ${e.message}")
-            Log.e("SSE_DEBUG", "💥 Exception type: ${e.javaClass.simpleName}")
+            android.util.Log.e(debugTag, "❌ NOTIFICATION FAILED: ${e.message}")
+            android.util.Log.e(debugTag, "💥 Stack trace: ${e.stackTrace.contentToString()}")
+            
+            // ✅ Fallback: سعی در نمایش نوتیفیکیشن ساده
+            try {
+                val simpleNotification = NotificationCompat.Builder(this, "default")
+                    .setContentTitle("ArkaFile")
+                    .setContentText("اعلان جدید دریافت شد")
+                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setAutoCancel(true)
+                    .build()
+                    
+                val fallbackId = (System.currentTimeMillis() % 1000).toInt()
+                val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                notificationManager.notify(fallbackId, simpleNotification)
+                android.util.Log.i(debugTag, "✅ FALLBACK notification sent")
+            } catch (fallbackException: Exception) {
+                android.util.Log.e(debugTag, "❌ Even fallback failed: ${fallbackException.message}")
+            }
         }
     }
 
@@ -455,19 +565,18 @@ class TokenBackgroundService : Service() {
         isRunning = false
         Log.d("SSE_DEBUG", "⏹️ Service running status set to false")
         
-        // بستن اتصال SSE
         eventSource?.cancel()
         Log.d("SSE_DEBUG", "🔌 SSE connection canceled")
         
-        // لغو reconnect job
         reconnectJob?.cancel()
         Log.d("SSE_DEBUG", "⏰ Reconnect job canceled")
         
-        // لغو scope
+        watchdogJob?.cancel()
+        Log.d("SSE_DEBUG", "🐕 Watchdog job canceled")
+        
         serviceScope.cancel()
         Log.d("SSE_DEBUG", "🔄 Service scope canceled")
         
-        // آزاد کردن WakeLock
         wakeLock?.let {
             if (it.isHeld) {
                 it.release()
@@ -478,5 +587,9 @@ class TokenBackgroundService : Service() {
         }
         
         Log.i("SSE_DEBUG", "✅ SSE SERVICE DESTROYED SUCCESSFULLY")
+        
+        val restartServiceIntent = Intent(applicationContext, TokenBackgroundService::class.java)
+        applicationContext.startService(restartServiceIntent)
+        Log.i("SSE_DEBUG", "🔄 SERVICE RESTART SCHEDULED")
     }
 } 

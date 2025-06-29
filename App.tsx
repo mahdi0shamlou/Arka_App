@@ -16,7 +16,6 @@ import Loader from './components/Loader';
 import SplashScreen from './components/SplashScreen';
 import Web from './components/Web';
 
-
 PushNotification.configure({
   onNotification: function (notification) {
     console.log('NOTIFICATION:', notification);

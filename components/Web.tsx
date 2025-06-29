@@ -20,26 +20,17 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
 
   useEffect(() => {
     const initializeTokens = async () => {
-      // ابتدا چک کنیم کاربر token دارد یا نه
       const existingToken = await TokenService.getValidAccessToken();
-
       if (existingToken) {
-        console.log('✅ Token exists, going to dashboard');
         setInitialUrl('https://www.arkafile.org/dashboard');
       } else {
-        console.log('⚠️ No token found, going to login');
         setInitialUrl('https://www.arkafile.org/login');
       }
-
       await checkAndSaveTokenFromCookies();
-
       // شروع SSE service پس از بارگذاری اولیه
       try {
         await BackgroundNotifModule?.StartSSEService();
-        console.log('🚀 SSE Service started');
-      } catch (error) {
-        console.log('⚠️ SSE Service start failed:', error);
-      }
+      } catch (error) {}
     };
 
     initializeTokens();
@@ -47,7 +38,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
 
   const handleNavigation = (event: any) => {
     const url = event.url;
-    console.log('🔗 Navigation attempt to:', url);
 
     // اگر لینک تلفن است، در اپ دیگری باز کن
     if (url.startsWith('tel:')) {
@@ -67,12 +57,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     // چک کن که آیا URL مربوط به دامنه‌های مجاز است یا نه
     const isAllowedDomain = allowedDomains.some(domain => url.includes(domain));
 
-    console.log('🔍 URL Check:', {
-      url,
-      isAllowed: isAllowedDomain,
-      allowedDomains: allowedDomains,
-    });
-
     // اگر دامنه مجاز نیست، در مرورگر خارجی باز کن
     if (!isAllowedDomain) {
       console.log('❌ Opening in external browser:', url);
@@ -80,7 +64,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       return false;
     }
 
-    console.log('✅ Allowing in WebView:', url);
     // بقیه لینک‌ها (مربوط به سایت اصلی) در WebView باز شوند
     return true;
   };
