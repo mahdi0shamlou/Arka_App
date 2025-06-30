@@ -142,26 +142,37 @@ class TokenBackgroundService : Service() {
                 Log.d("SSE_DEBUG", "✅ Token found: ${token.take(20)}...")
                 connectToSSE(token)
             } else {
-                Log.w("SSE_DEBUG", "⚠️ No token found in database, retrying in 10 seconds...")
-                scheduleReconnect(10000) // retry in 10 seconds
+                Log.w("SSE_DEBUG", "⚠️ No token found in database, connecting without token...")
+                connectToSSE(null)
             }
         }
     }
 
-    private fun connectToSSE(token: String) {
+    private fun connectToSSE(token: String?) {
         try {
-            // ✅ استفاده از توکن واقعی به جای URL ثابت
             val sseUrl = "$sseBaseUrl/1"
             Log.d("SSE_DEBUG", "🔌 Attempting SSE connection to: $sseUrl")
-            Log.d("SSE_DEBUG", "🔌 Using token: ${token.take(20)}...")
+            
+            if (token != null) {
+                Log.d("SSE_DEBUG", "🔌 Using token: ${token.take(20)}...")
+            } else {
+                Log.d("SSE_DEBUG", "🔌 No token available, connecting without authentication")
+            }
 
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url(sseUrl)
                 .addHeader("Accept", "text/event-stream")
                 .addHeader("Cache-Control", "no-cache")
                 .addHeader("Connection", "keep-alive")
                 .addHeader("User-Agent", "ArkaFile-SSE-Client/1.0")
-                .build()
+                
+            // اضافه کردن توکن به header اگر موجود باشد
+            if (token != null) {
+                requestBuilder.addHeader("Authorization", "Bearer $token")
+                Log.d("SSE_DEBUG", "🔑 Authorization header added with token")
+            }
+            
+            val request = requestBuilder.build()
 
             Log.d("SSE_DEBUG", "📡 Request headers: Accept=text/event-stream, Cache-Control=no-cache")
 
