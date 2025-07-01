@@ -14,84 +14,161 @@ import android.util.Log
 import android.content.Intent
 import android.provider.Settings
 import android.net.Uri
+import android.app.AlertDialog
+import android.widget.Toast
 
+/**
+ * 🔧 Optimized Main Activity
+ * - Smart permission management ✅
+ * - User-friendly dialogs ✅
+ * - Config-based constants ✅
+ * - Modern Android practices ✅
+ */
 class MainActivity : ReactActivity() {
 
     companion object {
         private const val NOTIFICATION_PERMISSION_REQUEST = 1001
         private const val TAG = "MainActivity"
+        private const val PERMISSION_DIALOG_SHOWN_KEY = "permission_dialog_shown"
     }
 
     /**
-     * Returns the name of the main component registered from JavaScript. This is used to schedule
-     * rendering of the component.
+     * Returns the name of the main component registered from JavaScript.
      */
     override fun getMainComponentName(): String = "ArkaFile"
 
     /**
-     * Returns the instance of the [ReactActivityDelegate]. We use [DefaultReactActivityDelegate]
-     * which allows you to enable New Architecture with a single boolean flags [fabricEnabled]
+     * Returns the instance of the [ReactActivityDelegate].
      */
     override fun createReactActivityDelegate(): ReactActivityDelegate =
         DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
         
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i(TAG, "🚀 MainActivity created")
         
-        // 🚨 فوری چک کردن و درخواست permission برای نوتیفیکیشن
+        // Handle notification intent data
+        handleNotificationIntent()
+        
+        // Check and request notification permission
         checkAndRequestNotificationPermission()
+        
+        Log.i(TAG, "✅ MainActivity initialization complete")
     }
     
     override fun onResume() {
         super.onResume()
-        // هر بار که اپ resume میشه دوباره چک کن
+        Log.d(TAG, "📱 MainActivity resumed")
+        
+        // Re-check permissions when app resumes
         checkAndRequestNotificationPermission()
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationIntent()
     }
     
     /**
-     * 🔥 چک کردن و درخواست permission برای Android 13+
+     * 📨 Handle intent data from notifications
+     */
+    private fun handleNotificationIntent() {
+        try {
+            val fromNotification = intent?.getBooleanExtra("from_notification", false) ?: false
+            if (fromNotification) {
+                val title = intent?.getStringExtra("notification_title")
+                val body = intent?.getStringExtra("notification_body")
+                
+                Log.i(TAG, "📨 Opened from notification: $title")
+                
+                // Show toast to user
+                if (!title.isNullOrBlank()) {
+                    Toast.makeText(this, "📨 $title", Toast.LENGTH_SHORT).show()
+                }
+                
+                // You can add additional handling here like navigating to specific screen
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error handling notification intent: ${e.message}")
+        }
+    }
+    
+    /**
+     * 🔔 Smart notification permission management
      */
     private fun checkAndRequestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val permission = Manifest.permission.POST_NOTIFICATIONS
             val hasPermission = ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
             
-            Log.i(TAG, "📱 POST_NOTIFICATIONS Permission Status: $hasPermission")
+            Log.d(TAG, "📱 POST_NOTIFICATIONS Permission Status: $hasPermission")
             
             if (!hasPermission) {
-                // چک کن که آیا باید rationale نشان دهیم
-                if (ActivityCompat.shouldShowRequestPermissionRationale(this, permission)) {
-                    // کاربر قبلاً رد کرده، باید توضیح دهیم
-                    Log.w(TAG, "⚠️ User previously denied permission, showing rationale")
-                    showPermissionRationale()
-                } else {
-                    // اولین بار یا permanently denied
-                    Log.i(TAG, "🔔 Requesting POST_NOTIFICATIONS permission")
-                    ActivityCompat.requestPermissions(this, arrayOf(permission), NOTIFICATION_PERMISSION_REQUEST)
+                val shouldShowRationale = ActivityCompat.shouldShowRequestPermissionRationale(this, permission)
+                val dialogShown = getSharedPreferences(TAG, MODE_PRIVATE)
+                    .getBoolean(PERMISSION_DIALOG_SHOWN_KEY, false)
+                
+                when {
+                    shouldShowRationale -> {
+                        Log.w(TAG, "⚠️ User previously denied permission, showing explanation")
+                        showPermissionRationale()
+                    }
+                    !dialogShown -> {
+                        Log.i(TAG, "🔔 First time requesting POST_NOTIFICATIONS permission")
+                        markDialogShown()
+                        ActivityCompat.requestPermissions(this, arrayOf(permission), NOTIFICATION_PERMISSION_REQUEST)
+                    }
+                    else -> {
+                        Log.w(TAG, "🚫 Permission likely permanently denied, directing to settings")
+                        showSettingsDialog()
+                    }
                 }
             } else {
                 Log.i(TAG, "✅ POST_NOTIFICATIONS permission already granted")
             }
         } else {
-            Log.i(TAG, "ℹ️ Android < 13, no runtime permission needed")
+            Log.d(TAG, "ℹ️ Android < 13, no runtime permission needed for notifications")
         }
     }
     
     /**
-     * نمایش توضیح چرا permission لازم است
+     * 💬 Show user-friendly permission explanation
      */
     private fun showPermissionRationale() {
-        // اینجا میتونید یک dialog یا snackbar نشان دهید
-        Log.i(TAG, "📢 برای دریافت اعلانات مهم، لطفاً اجازه دهید")
-        
-        // بعد از نمایش توضیح، دوباره درخواست کنید
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST)
-        }
+        AlertDialog.Builder(this)
+            .setTitle("🔔 اجازه نوتیفیکیشن")
+            .setMessage("برای دریافت اعلانات مهم ArkaFile، لطفاً اجازه نوتیفیکیشن را فعال کنید.\n\nاین اجازه برای:\n• اطلاع از آگهی‌های جدید\n• یادآوری‌های مهم\n• به‌روزرسانی‌های سیستم\n\nمورد استفاده قرار می‌گیرد.")
+            .setPositiveButton("بله، اجازه می‌دهم") { _, _ ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    ActivityCompat.requestPermissions(
+                        this, 
+                        arrayOf(Manifest.permission.POST_NOTIFICATIONS), 
+                        NOTIFICATION_PERMISSION_REQUEST
+                    )
+                }
+            }
+            .setNegativeButton("نه") { dialog, _ ->
+                Log.w(TAG, "❌ User declined permission in rationale")
+                dialog.dismiss()
+                Toast.makeText(this, "⚠️ بدون این اجازه، اعلانات دریافت نخواهید کرد", Toast.LENGTH_LONG).show()
+            }
+            .setCancelable(false)
+            .show()
     }
     
     /**
-     * پردازش نتیجه درخواست permission
+     * 📊 Track dialog display to avoid spam
+     */
+    private fun markDialogShown() {
+        getSharedPreferences(TAG, MODE_PRIVATE)
+            .edit()
+            .putBoolean(PERMISSION_DIALOG_SHOWN_KEY, true)
+            .apply()
+    }
+    
+    /**
+     * 📱 Handle permission request results
      */
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -99,16 +176,21 @@ class MainActivity : ReactActivity() {
         when (requestCode) {
             NOTIFICATION_PERMISSION_REQUEST -> {
                 if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    Log.i(TAG, "✅ POST_NOTIFICATIONS permission granted!")
+                    Log.i(TAG, "✅ POST_NOTIFICATIONS permission granted by user!")
+                    Toast.makeText(this, "✅ اعلانات فعال شد", Toast.LENGTH_SHORT).show()
                 } else {
-                    Log.w(TAG, "❌ POST_NOTIFICATIONS permission denied!")
+                    Log.w(TAG, "❌ POST_NOTIFICATIONS permission denied by user")
                     
-                    // چک کن که آیا permanently denied شده
+                    // Check if permanently denied
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         val permission = Manifest.permission.POST_NOTIFICATIONS
-                        if (!ActivityCompat.shouldShowRequestPermissionRationale(this, permission)) {
-                            Log.w(TAG, "🚫 Permission permanently denied, directing to settings")
+                        val shouldShowRationale = ActivityCompat.shouldShowRequestPermissionRationale(this, permission)
+                        
+                        if (!shouldShowRationale) {
+                            Log.w(TAG, "🚫 Permission permanently denied")
                             showSettingsDialog()
+                        } else {
+                            Toast.makeText(this, "⚠️ بدون این اجازه، اعلانات دریافت نخواهید کرد", Toast.LENGTH_LONG).show()
                         }
                     }
                 }
@@ -117,16 +199,34 @@ class MainActivity : ReactActivity() {
     }
     
     /**
-     * هدایت کاربر به تنظیمات اپ برای فعال کردن permission
+     * 🔧 Direct user to app settings for permanent permission
      */
     private fun showSettingsDialog() {
-        try {
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-            intent.data = Uri.fromParts("package", packageName, null)
-            startActivity(intent)
-            Log.i(TAG, "📱 Redirected to app settings")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to open app settings: ${e.message}")
-        }
+        AlertDialog.Builder(this)
+            .setTitle("🔧 تنظیمات اجازه‌ها")
+            .setMessage("برای فعال کردن اعلانات، لطفاً:\n\n1. روی 'باز کردن تنظیمات' کلیک کنید\n2. گزینه 'اعلانات' را پیدا کنید\n3. آن را فعال کنید\n4. به برنامه برگردید")
+            .setPositiveButton("باز کردن تنظیمات") { _, _ ->
+                try {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", packageName, null)
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    startActivity(intent)
+                    Log.i(TAG, "📱 Redirected to app settings")
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Failed to open app settings: ${e.message}")
+                    Toast.makeText(this, "❌ خطا در باز کردن تنظیمات", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("بعداً") { dialog, _ ->
+                Log.d(TAG, "ℹ️ User postponed settings")
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.d(TAG, "🛑 MainActivity destroyed")
     }
 }
