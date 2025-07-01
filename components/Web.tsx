@@ -1,4 +1,3 @@
-import CookieManager from '@react-native-cookies/cookies';
 import React, {useEffect} from 'react';
 import {Linking, NativeModules} from 'react-native';
 import WebView from 'react-native-webview';
@@ -17,23 +16,37 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   const [initialUrl, setInitialUrl] = React.useState(
     'https://www.arkafile.org/dashboard',
   );
+  const [connectionInitialized, setConnectionInitialized] =
+    React.useState(false);
 
   useEffect(() => {
-    const initializeTokens = async () => {
-      const existingToken = await TokenService.getValidAccessToken();
-      if (existingToken) {
-        setInitialUrl('https://www.arkafile.org/dashboard');
-      } else {
-        setInitialUrl('https://www.arkafile.org/login');
-      }
-      await checkAndSaveTokenFromCookies();
-      // شروع SSE service پس از بارگذاری اولیه
+    const initializeApp = async () => {
       try {
-        await BackgroundNotifModule?.StartSSEService();
-      } catch (error) {}
+        console.log('🚀 Initializing app...');
+
+        // اول همه اتصالات قبلی را قطع کن
+        try {
+          await BackgroundNotifModule?.StopSSEService();
+          console.log('🛑 Previous SSE connections stopped');
+        } catch (error) {
+          // نادیده بگیر اگر قبلاً متوقف بود
+        }
+
+        // بررسی توکن و تعیین URL اولیه
+        const existingToken = await TokenService.getValidAccessToken();
+        if (existingToken) {
+          setInitialUrl('https://www.arkafile.org/dashboard');
+          console.log('✅ Token found, redirecting to dashboard');
+        } else {
+          setInitialUrl('https://www.arkafile.org/login');
+          console.log('❌ No token found, redirecting to login');
+        }
+      } catch (error) {
+        console.error('❌ Error initializing app:', error);
+      }
     };
 
-    initializeTokens();
+    initializeApp();
   }, []);
 
   const handleNavigation = (event: any) => {
@@ -68,47 +81,83 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     return true;
   };
 
-  const checkAndSaveTokenFromCookies = async () => {
+  const initializeSSEConnection = async () => {
     try {
-      const domains = ['https://www.arkafile.org', 'https://www.arkafile.info'];
+      if (connectionInitialized) {
+        console.log('⚠️ Connection already initialized, skipping...');
+        return;
+      }
 
-      for (const domain of domains) {
-        try {
-          const cookies = await CookieManager.get(domain);
+      console.log('🔄 Initializing SSE connection...');
 
-          if (cookies.token && cookies.token.value) {
-            await TokenService.saveTokens({token: cookies.token.value});
+      // قطع کردن اتصالات قبلی
+      try {
+        await BackgroundNotifModule?.StopSSEService();
+        console.log('🛑 Previous connections stopped');
+      } catch (error) {
+        // نادیده بگیر
+      }
 
-            // راه‌اندازی مجدد SSE connection با توکن جدید
-            try {
-              await BackgroundNotifModule?.RestartSSEConnection();
-              console.log('🔄 SSE Connection restarted with new token');
-            } catch (error) {
-              console.log('⚠️ SSE restart failed:', error);
-            }
+      // یک مقدار صبر کن تا اتصالات قبلی کاملاً قطع شوند
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-            return;
-          }
-        } catch (err) {
-          // Silent error handling
-        }
+      // شروع اتصال جدید
+      try {
+        await BackgroundNotifModule?.StartSSEService();
+        setConnectionInitialized(true);
+        console.log('✅ SSE Connection initialized successfully');
+      } catch (error) {
+        console.log('❌ SSE Connection failed:', error);
       }
     } catch (error) {
-      console.error('Error checking cookies:', error);
+      console.error('❌ Error initializing SSE connection:', error);
+    }
+  };
+
+  const checkAndSaveTokenFromCookies = async () => {
+    try {
+      console.log('🔍 Checking for token in cookies...');
+
+      // استفاده از TokenService برای همگام‌سازی
+      const newToken = await TokenService.forceSyncFromCookies();
+
+      if (newToken) {
+        console.log('✅ Token found and synced from cookies');
+
+        // اگر اتصال هنوز شروع نشده، شروع کن
+        if (!connectionInitialized) {
+          await initializeSSEConnection();
+        } else {
+          // اگر اتصال موجود است، فقط refresh کن
+          try {
+            await BackgroundNotifModule?.CheckTokenAndConnect();
+            console.log('🔄 SSE Connection refreshed with new token');
+          } catch (error) {
+            console.log('⚠️ SSE refresh failed:', error);
+          }
+        }
+      } else {
+        console.log('❌ No token found in cookies');
+      }
+    } catch (error) {
+      console.error('❌ Error checking cookies:', error);
     }
   };
 
   const handleLoadEnd = async () => {
     setLoading(false);
+    console.log('📱 WebView load ended');
 
-    // Check and save token from cookies
-    await checkAndSaveTokenFromCookies();
-
-    // اطمینان از اینکه SSE service در حال اجرا است
-    try {
-      await BackgroundNotifModule?.CheckTokenAndConnect();
-    } catch (error) {
-      console.log('⚠️ SSE token check failed:', error);
+    // فقط اگر اتصال هنوز شروع نشده باشد
+    if (!connectionInitialized) {
+      console.log(
+        '🔄 Load ended, checking for tokens and initializing connection...',
+      );
+      await checkAndSaveTokenFromCookies();
+    } else {
+      console.log('✅ Connection already initialized, just checking tokens...');
+      // فقط توکن را چک کن بدون تغییر اتصال
+      await TokenService.getValidAccessToken();
     }
   };
 
@@ -117,19 +166,24 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       const data = JSON.parse(event.nativeEvent.data);
 
       if (data.type === 'CHECK_COOKIES') {
+        console.log('📨 Received CHECK_COOKIES message - user logged in');
         setTimeout(async () => {
           await checkAndSaveTokenFromCookies();
-        }, 2000);
+        }, 2000); // صبر کن تا cookies set شوند
       }
 
       if (data.type === 'LOGOUT') {
+        console.log('📨 Received LOGOUT message - user logged out');
+
+        // پاک کردن همه توکن‌ها
         await TokenService.clearTokens();
         await TokenService.clearCookies();
 
-        // توقف SSE service هنگام logout
+        // توقف کامل SSE service و reset connection state
         try {
           await BackgroundNotifModule?.StopSSEService();
-          console.log('🛑 SSE Service stopped on logout');
+          setConnectionInitialized(false);
+          console.log('🛑 SSE Service stopped and connection reset on logout');
         } catch (error) {
           console.log('⚠️ SSE stop failed on logout:', error);
         }

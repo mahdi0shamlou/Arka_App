@@ -40,7 +40,7 @@ export class TokenService {
         ...tokens,
         saved_at: Date.now(),
       };
-      
+
       await AsyncStorage.setItem(this.TOKEN_KEY, JSON.stringify(tokenData));
       console.log('Token saved successfully');
       return true;
@@ -97,24 +97,29 @@ export class TokenService {
   }
 
   /**
-   * Get valid token (from storage or cookies)
+   * Get valid token (prioritize cookies over storage)
    */
   static async getValidAccessToken(): Promise<string | null> {
     try {
-      // First try to get from stored tokens
-      let tokens = await this.getStoredTokens();
-      
-      if (!tokens || !tokens.token) {
-        // If no stored tokens, try to get from cookies
-        tokens = await this.getTokensFromCookies();
-        
-        if (tokens) {
-          // Save newly retrieved tokens
-          await this.saveTokens(tokens);
-        }
+      // Always check cookies first (most up-to-date)
+      let tokens = await this.getTokensFromCookies();
+
+      if (tokens && tokens.token) {
+        // Save newly retrieved tokens to storage
+        await this.saveTokens(tokens);
+        console.log('✅ Token found in cookies and saved to storage');
+        return tokens.token;
       }
 
-      return tokens?.token || null;
+      // If no cookies, try storage as fallback
+      tokens = await this.getStoredTokens();
+      if (tokens && tokens.token) {
+        console.log('⚠️ Token found only in storage (cookies may be expired)');
+        return tokens.token;
+      }
+
+      console.log('❌ No valid token found');
+      return null;
     } catch (error) {
       console.error('Error getting valid token:', error);
       return null;
@@ -140,13 +145,13 @@ export class TokenService {
   static async syncTokensFromCookies(): Promise<Token | null> {
     try {
       const cookieTokens = await this.getTokensFromCookies();
-      
+
       if (cookieTokens) {
         await this.saveTokens(cookieTokens);
         console.log('Token synced from cookies');
         return cookieTokens;
       }
-      
+
       return null;
     } catch (error) {
       console.error('Error syncing token from cookies:', error);
@@ -165,4 +170,31 @@ export class TokenService {
       return {};
     }
   }
-} 
+
+  /**
+   * Force sync token from cookies (used when user logs in)
+   */
+  static async forceSyncFromCookies(): Promise<string | null> {
+    try {
+      console.log('🔄 Force syncing token from cookies...');
+
+      // Clear old stored token first
+      await this.clearTokens();
+
+      // Get fresh token from cookies
+      const tokens = await this.getTokensFromCookies();
+
+      if (tokens && tokens.token) {
+        await this.saveTokens(tokens);
+        console.log('✅ Token force synced successfully');
+        return tokens.token;
+      }
+
+      console.log('❌ No token found in cookies during force sync');
+      return null;
+    } catch (error) {
+      console.error('Error force syncing token:', error);
+      return null;
+    }
+  }
+}

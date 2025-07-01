@@ -154,7 +154,7 @@ class TokenBackgroundService : Service() {
             Log.d("SSE_DEBUG_TOKEN", "🔌 Attempting SSE connection to: $sseUrl")
             
             if (token != null) {
-                Log.d("SSE_DEBUG_TOKEN", "🔌 Using token: ${token.take(20)}...")
+                Log.d("SSE_DEBUG_TOKEN", "🔌in Using token: ${token.take(20)}...")
             } else {
                 Log.d("SSE_DEBUG_TOKEN", "🔌 No token available, connecting without authentication")
             }
@@ -169,7 +169,7 @@ class TokenBackgroundService : Service() {
             // اضافه کردن توکن به header اگر موجود باشد
             if (token != null) {
                 requestBuilder.addHeader("Authorization", "Bearer $token")
-                Log.d("SSE_DEBUG", "🔑 Authorization header added with token")
+                Log.d("SSE_DEBUG_TOKEN", "🔑 Authorization header added with token")
             }
             
             val request = requestBuilder.build()
