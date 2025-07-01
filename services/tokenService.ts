@@ -7,21 +7,41 @@ export interface Token {
 
 export class TokenService {
   private static readonly TOKEN_KEY = 'app_token';
-  private static readonly DOMAIN = 'arkafile.info';
+  private static readonly DOMAINS = ['arkafile.org', 'arkafile.info'];
 
   /**
-   * Extract token from cookies for the current domain
+   * Extract token from cookies for both domains
    */
   static async getTokensFromCookies(): Promise<Token | null> {
     try {
-      const cookies = await CookieManager.get(`https://${this.DOMAIN}`);
-      console.log('Retrieved cookies:', cookies);
+      let tokenData: Token = {};
 
-      const tokenData: Token = {};
+      // Check both domains for cookies
+      for (const domain of this.DOMAINS) {
+        try {
+          const cookies = await CookieManager.get(`https://www.${domain}`);
+          console.log(`Retrieved cookies from ${domain}:`, cookies);
 
-      // Extract only the main token
-      if (cookies.token) {
-        tokenData.token = cookies.token.value;
+          // Extract token if found
+          if (cookies.token && cookies.token.value) {
+            tokenData.token = cookies.token.value;
+            console.log(`✅ Token found in ${domain} cookies`);
+            break; // Use first found token
+          }
+
+          // Also check without www
+          const cookiesNonWWW = await CookieManager.get(`https://${domain}`);
+          if (cookiesNonWWW.token && cookiesNonWWW.token.value) {
+            tokenData.token = cookiesNonWWW.token.value;
+            console.log(`✅ Token found in ${domain} cookies (non-www)`);
+            break;
+          }
+        } catch (domainError) {
+          console.log(
+            `⚠️ Could not get cookies from ${domain}:`,
+            (domainError as Error).message || domainError,
+          );
+        }
       }
 
       return tokenData.token ? tokenData : null;
@@ -160,11 +180,34 @@ export class TokenService {
   }
 
   /**
-   * Get all cookies for debugging
+   * Get all cookies for debugging from both domains
    */
   static async getAllCookies(): Promise<any> {
     try {
-      return await CookieManager.get(`https://${this.DOMAIN}`);
+      const allCookies: any = {};
+
+      for (const domain of this.DOMAINS) {
+        try {
+          // Get cookies with www
+          const cookiesWWW = await CookieManager.get(`https://www.${domain}`);
+          if (Object.keys(cookiesWWW).length > 0) {
+            allCookies[`www.${domain}`] = cookiesWWW;
+          }
+
+          // Get cookies without www
+          const cookiesNonWWW = await CookieManager.get(`https://${domain}`);
+          if (Object.keys(cookiesNonWWW).length > 0) {
+            allCookies[domain] = cookiesNonWWW;
+          }
+        } catch (domainError) {
+          console.log(
+            `⚠️ Could not get cookies from ${domain} for debugging:`,
+            (domainError as Error).message || domainError,
+          );
+        }
+      }
+
+      return allCookies;
     } catch (error) {
       console.error('Error getting all cookies:', error);
       return {};
