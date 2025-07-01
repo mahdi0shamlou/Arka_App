@@ -116,22 +116,24 @@ class TokenBackgroundService : Service() {
         return START_STICKY
     }
 
-    // 🔍 Smart connection start with token validation
+    // 🔍 Simple token check with retries
     private suspend fun startConnectionWithTokenCheck() {
-        Log.d(TAG, "🔍 Starting connection with token validation")
+        Log.i(TAG, "🔍 Token check started")
         
         var token: String? = null
-        repeat(AppConfig.TOKEN_CHECK_MAX_RETRIES) { attempt ->
-            token = getTokenFromDatabase()
+        delay(2000) // Wait for AsyncStorage
+        
+        repeat(5) { attempt ->
+            token = getTokenSimple()
             if (token != null) {
-                Log.d(TAG, "✅ Token found on attempt ${attempt + 1}")
+                Log.i(TAG, "✅ Token found (attempt ${attempt + 1})")
                 return@repeat
             }
-            Log.w(TAG, "⚠️ No token found on attempt ${attempt + 1}, retrying...")
-            delay(AppConfig.TOKEN_CHECK_RETRY_DELAY_MS)
+            Log.w(TAG, "❌ No token (attempt ${attempt + 1}), retrying...")
+            delay(1000)
         }
         
-        Log.i(TAG, "🔌 Starting SSE connection ${if (token != null) "with" else "without"} token")
+        Log.i(TAG, if (token != null) "🔌 Starting WITH token" else "🔌 Starting WITHOUT token")
         startSSEConnection()
     }
 
@@ -176,7 +178,7 @@ class TokenBackgroundService : Service() {
         Log.d(TAG, "🔌 Starting fresh SSE connection")
         
         try {
-            val token = getTokenFromDatabase()
+            val token = getTokenSimple()
             val sseUrl = "${AppConfig.SSE_BASE_URL}${AppConfig.SSE_ENDPOINT}"
             
             Log.d(TAG, "🌐 Connecting to: $sseUrl")
@@ -410,26 +412,63 @@ class TokenBackgroundService : Service() {
         }
     }
 
-    // 🗃️ Secure token retrieval
-    private fun getTokenFromDatabase(): String? {
-        return try {
-            val db = openOrCreateDatabase(AppConfig.DB_NAME, 0, null)
-            val cursor = db.rawQuery(
-                "SELECT value FROM catalystLocalStorage WHERE key = ?", 
-                arrayOf(AppConfig.TOKEN_KEY)
-            )
+    // 🗃️ Simple token retrieval with multiple database attempts
+    private suspend fun getTokenSimple(): String? = withContext(Dispatchers.IO) {
+        return@withContext try {
+            // Try different database names
+            val dbNames = listOf("RKStorage", "ReactNativeAsyncStorage", "mmkv", "default")
             
-            val token = if (cursor.moveToFirst()) {
-                val jsonValue = cursor.getString(0)
-                org.json.JSONObject(jsonValue).getString("token")
-            } else null
+            for (dbName in dbNames) {
+                try {
+                    Log.d(TAG, "🔍 Trying DB: $dbName")
+                    val db = openOrCreateDatabase(dbName, 0, null)
+                    
+                    // Try to find our table
+                    val tables = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'", null)
+                    Log.d(TAG, "📊 Tables in $dbName: ${tables.count}")
+                    while (tables.moveToNext()) {
+                        val tableName = tables.getString(0)
+                        Log.d(TAG, "📋 Table: $tableName")
+                        
+                        if (tableName == "catalystLocalStorage") {
+                            // List all keys
+                            val allCursor = db.rawQuery("SELECT key FROM catalystLocalStorage", null)
+                            Log.d(TAG, "📊 Keys: ${allCursor.count}")
+                            while (allCursor.moveToNext()) {
+                                Log.d(TAG, "🔑 Key: '${allCursor.getString(0)}'")
+                            }
+                            allCursor.close()
+                            
+                            // Try our key
+                            val cursor = db.rawQuery("SELECT value FROM catalystLocalStorage WHERE key = ?", arrayOf(AppConfig.TOKEN_KEY))
+                            if (cursor.moveToFirst()) {
+                                val value = cursor.getString(0)
+                                Log.i(TAG, "✅ Found token in $dbName!")
+                                cursor.close()
+                                tables.close()
+                                db.close()
+                                
+                                return@withContext try {
+                                    org.json.JSONObject(value).optString("token", null)
+                                } catch (e: Exception) {
+                                    value.replace("\"", "")
+                                }?.takeIf { it.isNotBlank() && it.length > 10 }
+                            }
+                            cursor.close()
+                        }
+                    }
+                    tables.close()
+                    db.close()
+                } catch (e: Exception) {
+                    Log.d(TAG, "❌ DB $dbName failed: ${e.message}")
+                }
+            }
             
-            cursor.close()
-            db.close()
+            Log.w(TAG, "❌ No token found in any database")
+            null
             
-            token?.takeIf { it.isNotBlank() }
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error reading token: ${e.message}")
+            Log.e(TAG, "❌ DB error: ${e.message}")
             null
         }
     }

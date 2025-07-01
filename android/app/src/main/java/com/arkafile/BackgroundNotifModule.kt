@@ -34,26 +34,21 @@ class BackgroundNotifModule(reactContext: ReactApplicationContext) : ReactContex
         
         moduleScope.launch {
             try {
+                delay(500)
                 val token = getTokenFromDatabase()
-                if (token != null) {
-                    Log.i(TAG, "✅ Token found: ${token.take(20)}... - Starting authenticated connection")
-                } else {
-                    Log.i(TAG, "⚠️ No token found - Starting anonymous connection")
-                }
+                Log.i(TAG, if (token != null) "✅ Token found" else "⚠️ No token")
                 
-                // Start service with token check flag
                 val startIntent = Intent(reactApplicationContext, TokenBackgroundService::class.java).apply {
                     putExtra("trigger_token_check", true)
                 }
                 
                 reactApplicationContext.startService(startIntent)
-                Log.i(TAG, "✅ SSE service started successfully")
-                
-                promise?.resolve("SSE service started")
+                Log.i(TAG, "✅ Service started")
+                promise?.resolve("Started")
                 
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Failed to start connection: ${e.message}")
-                promise?.reject("CONNECTION_ERROR", "Failed to start SSE connection: ${e.message}")
+                Log.e(TAG, "❌ Start error: ${e.message}")
+                promise?.reject("ERROR", e.message)
             }
         }
     }
@@ -65,25 +60,19 @@ class BackgroundNotifModule(reactContext: ReactApplicationContext) : ReactContex
         
         moduleScope.launch {
             try {
-                // Stop existing service gracefully
-                Log.d(TAG, "🛑 Stopping existing service...")
+                Log.i(TAG, "🔄 Restarting...")
                 val stopIntent = Intent(reactApplicationContext, TokenBackgroundService::class.java)
                 reactApplicationContext.stopService(stopIntent)
                 
-                // Wait for complete cleanup using coroutines instead of Thread.sleep
-                Log.d(TAG, "⏳ Waiting for service cleanup...")
-                delay(AppConfig.CONNECTION_CLEANUP_DELAY_MS)
-                
-                // Start fresh connection
-                Log.d(TAG, "▶️ Starting fresh connection...")
+                delay(2000) // Wait for cleanup + AsyncStorage
                 StartConnection()
                 
-                Log.i(TAG, "✅ Connection restarted successfully")
-                promise?.resolve("Connection restarted successfully")
+                Log.i(TAG, "✅ Restarted")
+                promise?.resolve("Restarted")
                 
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Failed to restart connection: ${e.message}")
-                promise?.reject("RESTART_ERROR", "Failed to restart connection: ${e.message}")
+                Log.e(TAG, "❌ Restart error: ${e.message}")
+                promise?.reject("ERROR", e.message)
             }
         }
     }
@@ -133,21 +122,20 @@ class BackgroundNotifModule(reactContext: ReactApplicationContext) : ReactContex
         }
     }
 
-    // 🗃️ Secure token retrieval with improved error handling
+    // 🗃️ Simple token check
     private suspend fun getTokenFromDatabase(): String? = withContext(Dispatchers.IO) {
         return@withContext try {
             val db = reactApplicationContext.openOrCreateDatabase(AppConfig.DB_NAME, 0, null)
             
-            val cursor = db.rawQuery(
-                "SELECT value FROM catalystLocalStorage WHERE key = ?", 
-                arrayOf(AppConfig.TOKEN_KEY)
-            )
+            val cursor = db.rawQuery("SELECT value FROM catalystLocalStorage WHERE key = ?", arrayOf(AppConfig.TOKEN_KEY))
             
             val token = if (cursor.moveToFirst()) {
-                val jsonValue = cursor.getString(0)
-                // Parse JSON to extract token
-                val jsonObject = JSONObject(jsonValue)
-                jsonObject.getString("token")
+                val value = cursor.getString(0)
+                try {
+                    JSONObject(value).optString("token", null)
+                } catch (e: Exception) {
+                    value.replace("\"", "")
+                }
             } else {
                 null
             }
@@ -155,12 +143,10 @@ class BackgroundNotifModule(reactContext: ReactApplicationContext) : ReactContex
             cursor.close()
             db.close()
             
-            // Return token only if it's not blank
-            token?.takeIf { it.isNotBlank() }
+            token?.takeIf { it.isNotBlank() && it.length > 10 }
             
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error reading token from database: ${e.message}")
-            Log.e(TAG, "💥 Exception type: ${e.javaClass.simpleName}")
+            Log.e(TAG, "❌ Token error: ${e.message}")
             null
         }
     }

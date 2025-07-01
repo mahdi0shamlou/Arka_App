@@ -10,8 +10,8 @@ object AppConfig {
     const val RECONNECT_BASE_DELAY_MS = 2000L
     const val RECONNECT_MAX_DELAY_MS = 60000L
     const val WATCHDOG_INTERVAL_MS = 300000L // 5 minutes
-    const val TOKEN_CHECK_RETRY_DELAY_MS = 500L
-    const val TOKEN_CHECK_MAX_RETRIES = 3
+    const val TOKEN_CHECK_RETRY_DELAY_MS = 1000L
+    const val TOKEN_CHECK_MAX_RETRIES = 30
     const val NETWORK_RECOVERY_DEBOUNCE_MS = 10000L
     const val CONNECTION_CLEANUP_DELAY_MS = 1000L
     
