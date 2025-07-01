@@ -8,13 +8,48 @@ buildscript {
         kotlinVersion = "2.0.21"
     }
     repositories {
+       // ✅ Mirror های ایرانی و چینی (بدون فیلتر)
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/central' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://repo.huaweicloud.com/repository/maven/' }
+        maven { url 'https://oss.sonatype.org/content/repositories/snapshots/' }
+        
+        // Mirror های اضافی
+        maven { url 'https://jitpack.io' }
+        maven { url 'https://repository.jboss.org/nexus/content/repositories/releases/' }
+        
+        // آخرین گزینه‌ها (ممکن است فیلتر شده باشند)
+        maven { url 'https://maven.google.com' }
+        maven { url 'https://repo1.maven.org/maven2' }
         google()
         mavenCentral()
+        gradlePluginPortal()
     }
     dependencies {
         classpath("com.android.tools.build:gradle")
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+    }
+}
+
+// ✅ اضافه کردن allprojects
+allprojects {
+    repositories {
+        // همان ترتیب mirror ها
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/central' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://repo.huaweicloud.com/repository/maven/' }
+        maven { url 'https://oss.sonatype.org/content/repositories/snapshots/' }
+        maven { url 'https://jitpack.io' }
+        maven { url 'https://repository.jboss.org/nexus/content/repositories/releases/' }
+        
+        // آخرین گزینه‌ها
+        maven { url 'https://maven.google.com' }
+        maven { url 'https://repo1.maven.org/maven2' }
+        google()
+        mavenCentral()
     }
 }
 

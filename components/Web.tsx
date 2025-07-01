@@ -161,7 +161,7 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       thirdPartyCookiesEnabled={true}
       domStorageEnabled={true}
       javaScriptEnabled={true}
-      startInLoadingState={false}
+      startInLoadingState={true}
       mixedContentMode={'compatibility'}
       allowUniversalAccessFromFileURLs={true}
       setSupportMultipleWindows={false}

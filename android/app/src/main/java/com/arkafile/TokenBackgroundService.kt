@@ -151,12 +151,12 @@ class TokenBackgroundService : Service() {
     private fun connectToSSE(token: String?) {
         try {
             val sseUrl = "$sseBaseUrl/1"
-            Log.d("SSE_DEBUG", "🔌 Attempting SSE connection to: $sseUrl")
+            Log.d("SSE_DEBUG_TOKEN", "🔌 Attempting SSE connection to: $sseUrl")
             
             if (token != null) {
-                Log.d("SSE_DEBUG", "🔌 Using token: ${token.take(20)}...")
+                Log.d("SSE_DEBUG_TOKEN", "🔌 Using token: ${token.take(20)}...")
             } else {
-                Log.d("SSE_DEBUG", "🔌 No token available, connecting without authentication")
+                Log.d("SSE_DEBUG_TOKEN", "🔌 No token available, connecting without authentication")
             }
 
             val requestBuilder = Request.Builder()

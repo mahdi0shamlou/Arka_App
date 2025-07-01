@@ -8,33 +8,12 @@ import {
   StatusBar,
   ToastAndroid,
 } from 'react-native';
-import PushNotification from 'react-native-push-notification';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
 import ErrorHandler from './components/ErrorHandler';
 import Loader from './components/Loader';
 import SplashScreen from './components/SplashScreen';
 import Web from './components/Web';
-
-PushNotification.configure({
-  onNotification: function (notification) {
-    console.log('NOTIFICATION:', notification);
-  },
-  requestPermissions: false,
-  popInitialNotification: false,
-});
-
-PushNotification.createChannel(
-  {
-    channelId: 'default-channel-id',
-    channelName: 'ArkaFile Notifications',
-    channelDescription: 'Default notifications for ArkaFile app',
-    soundName: 'default',
-    importance: 4,
-    vibrate: true,
-  },
-  created => console.log(`createChannel returned '${created}'`),
-);
 
 let backPressTime = 0;
 
