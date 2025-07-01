@@ -172,28 +172,36 @@ export class TokenService {
   }
 
   /**
-   * Force sync token from cookies (used when user logs in)
+   * Smart sync token from cookies (only if different from stored)
    */
   static async forceSyncFromCookies(): Promise<string | null> {
     try {
-      console.log('🔄 Force syncing token from cookies...');
+      console.log('🔄 Smart syncing token from cookies...');
 
-      // Clear old stored token first
-      await this.clearTokens();
+      // Get current stored token
+      const storedTokens = await this.getStoredTokens();
+      const storedToken = storedTokens?.token;
 
       // Get fresh token from cookies
-      const tokens = await this.getTokensFromCookies();
+      const cookieTokens = await this.getTokensFromCookies();
+      const cookieToken = cookieTokens?.token;
 
-      if (tokens && tokens.token) {
-        await this.saveTokens(tokens);
-        console.log('✅ Token force synced successfully');
-        return tokens.token;
+      if (cookieToken) {
+        // Only update if different from stored token
+        if (storedToken !== cookieToken) {
+          await this.saveTokens({token: cookieToken});
+          console.log('✅ Token updated - was different from stored version');
+          return cookieToken;
+        } else {
+          console.log('✅ Token unchanged - same as stored version');
+          return cookieToken;
+        }
       }
 
-      console.log('❌ No token found in cookies during force sync');
+      console.log('❌ No token found in cookies during sync');
       return null;
     } catch (error) {
-      console.error('Error force syncing token:', error);
+      console.error('Error syncing token:', error);
       return null;
     }
   }

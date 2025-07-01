@@ -82,15 +82,54 @@ class TokenBackgroundService : Service() {
         Log.d("SSE_DEBUG", "🔍 Current running status: $isRunning")
         Log.d("SSE_DEBUG", "🆔 Start ID: $startId")
         
+        // چک کن که آیا درخواست فوری token check هست
+        val triggerTokenCheck = intent?.getBooleanExtra("trigger_token_check", false) ?: false
+        if (triggerTokenCheck) {
+            Log.d("SSE_DEBUG", "🚀 TRIGGER TOKEN CHECK requested - checking token with retry...")
+            serviceScope.launch {
+                // تلاش چندباره برای خواندن token با delay
+                var currentToken: String? = null
+                repeat(3) { attempt ->
+                    currentToken = getTokenFromDatabase()
+                    if (currentToken != null) {
+                        Log.d("SSE_DEBUG", "✅ Token found on attempt ${attempt + 1}")
+                        return@repeat
+                    } else {
+                        Log.w("SSE_DEBUG", "⚠️ No token found on attempt ${attempt + 1}, retrying...")
+                        delay(500) // صبر 500ms بین تلاش ها
+                    }
+                }
+                
+                if (currentToken != null && eventSource == null) {
+                    Log.d("SSE_DEBUG", "✅ Token found and no active connection - starting connection now...")
+                    startSSEConnection()
+                } else if (currentToken != null) {
+                    Log.d("SSE_DEBUG", "✅ Token found and connection exists - restarting connection with new token...")
+                    // اگر connection موجود است، آن را restart کن تا token جدید را استفاده کند
+                    closeExistingConnections()
+                    delay(1000)
+                    startSSEConnection()
+                } else {
+                    Log.w("SSE_DEBUG", "⚠️ No token found after all retries")
+                }
+            }
+            return START_STICKY
+        }
+        
         if (!isRunning) {
-            Log.d("SSE_DEBUG", "▶️ Starting SSE service...")
+            Log.d("SSE_DEBUG", "▶️ Starting SSE service for the first time...")
             isRunning = true
             Log.d("SSE_DEBUG", "🔋 Acquiring WakeLock...")
             acquireWakeLock()
-            Log.d("SSE_DEBUG", "🔌 Starting SSE connection...")
+            
+            // فقط برای اولین بار connection ایجاد کن
+            Log.d("SSE_DEBUG", "🧹 Cleaning up any existing connections...")
+            closeExistingConnections()
+            Log.d("SSE_DEBUG", "🔌 Starting fresh SSE connection...")
             startSSEConnection()
         } else {
-            Log.d("SSE_DEBUG", "⏩ Service already running, skipping initialization")
+            Log.d("SSE_DEBUG", "✅ Service already running - no action needed")
+            // اگر service در حال اجرا است، هیچ کار نکن تا loop نشود
         }
         
         Log.d("SSE_DEBUG", "🔄 Returning START_STICKY for auto-restart")
@@ -99,17 +138,43 @@ class TokenBackgroundService : Service() {
 
   
 
+    private fun closeExistingConnections() {
+        Log.d("SSE_DEBUG", "🧹 Cleaning up existing connections...")
+        
+        try {
+            // بستن اتصال SSE فعلی
+            eventSource?.cancel()
+            eventSource = null
+            Log.d("SSE_DEBUG", "🔌 EventSource closed and nullified")
+            
+            // لغو job های reconnect
+            reconnectJob?.cancel()
+            reconnectJob = null
+            Log.d("SSE_DEBUG", "⏰ Reconnect job canceled")
+            
+            // Reset reconnection attempts
+            reconnectAttempts = 0
+            Log.d("SSE_DEBUG", "🔄 Reconnect attempts reset to 0")
+            
+            Log.d("SSE_DEBUG", "✅ All existing connections cleaned up successfully")
+            
+        } catch (e: Exception) {
+            Log.e("SSE_DEBUG", "❌ Error during connection cleanup: ${e.message}")
+        }
+    }
+
     private fun startWatchdog() {
         watchdogJob = serviceScope.launch {
             while (isRunning) {
-                delay(60000) // چک کردن هر دقیقه
+                delay(300000) // چک کردن هر 5 دقیقه (کم aggressive)
                 
                 if (isRunning && eventSource == null) {
-                    Log.w("SSE_DEBUG", "⚠️ WATCHDOG: SSE connection lost, restarting...")
+                    Log.w("SSE_DEBUG", "⚠️ WATCHDOG: SSE connection lost after 5 minutes, reconnecting...")
+                    // فقط اگر واقعاً connection نداشته باشیم restart کن
                     startSSEConnection()
+                } else {
+                    Log.d("SSE_DEBUG", "💓 WATCHDOG: Service healthy - isRunning: $isRunning, eventSource: ${eventSource != null}")
                 }
-                
-                Log.d("SSE_DEBUG", "💓 WATCHDOG: Service heartbeat - isRunning: $isRunning, eventSource: ${eventSource != null}")
             }
         }
     }
@@ -137,6 +202,15 @@ class TokenBackgroundService : Service() {
     private fun startSSEConnection() {
         serviceScope.launch {
             Log.d("SSE_DEBUG", "🔍 Starting SSE connection process...")
+            
+            // اطمینان از بستن اتصالات قبلی (اضافی برای اطمینان)
+            Log.d("SSE_DEBUG", "🧹 Double-checking: closing any remaining connections...")
+            eventSource?.cancel()
+            eventSource = null
+            
+            // کمی صبر کن تا اتصال قبلی کاملاً بسته شود
+            delay(500)
+            
             val token = getTokenFromDatabase()
             if (token != null) {
                 Log.d("SSE_DEBUG", "✅ Token found: ${token.take(20)}...")
@@ -386,15 +460,15 @@ class TokenBackgroundService : Service() {
             var checkCount = 0
             
             while (isRunning && eventSource != null) {
-                delay(25000) // چک کردن هر 25 ثانیه (5 ثانیه بیشتر از timing سرور)
+                delay(120000) // چک کردن هر 2 دقیقه (بجای 25 ثانیه)
                 checkCount++
                 
-                Log.w("SSE_DEBUG", "⚠️ Event timeout check #$checkCount - NO EVENTS received in last 25 seconds!")
+                Log.d("SSE_DEBUG", "⏰ Event timeout check #$checkCount - Checking connection health after 2 minutes")
                 Log.d("SSE_DEBUG", "🔍 Connection still alive: ${eventSource != null}")
                 Log.d("SSE_DEBUG", "🔍 Service running: $isRunning")
                 
-                if (checkCount >= 3) { // بعد از 75 ثانیه بدون event
-                    Log.e("SSE_DEBUG", "❌ FORCING RECONNECTION - No events for 75 seconds!")
+                if (checkCount >= 5) { // بعد از 10 دقیقه بدون event (بجای 75 ثانیه)
+                    Log.w("SSE_DEBUG", "⚠️ LONG CONNECTION TIMEOUT - No events for 10 minutes, considering reconnect...")
                     eventSource?.cancel()
                     scheduleReconnect(5000)
                     break
@@ -599,8 +673,9 @@ class TokenBackgroundService : Service() {
         
         Log.i("SSE_DEBUG", "✅ SSE SERVICE DESTROYED SUCCESSFULLY")
         
-        val restartServiceIntent = Intent(applicationContext, TokenBackgroundService::class.java)
-        applicationContext.startService(restartServiceIntent)
-        Log.i("SSE_DEBUG", "🔄 SERVICE RESTART SCHEDULED")
+        // ❌ AUTO-RESTART REMOVED - جلوگیری از loop های بی‌پایان
+        // val restartServiceIntent = Intent(applicationContext, TokenBackgroundService::class.java)
+        // applicationContext.startService(restartServiceIntent)
+        Log.i("SSE_DEBUG", "🚫 AUTO-RESTART DISABLED - Clean shutdown to prevent loops")
     }
 } 

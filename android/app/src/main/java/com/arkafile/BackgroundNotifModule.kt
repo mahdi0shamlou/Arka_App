@@ -14,15 +14,21 @@ class BackgroundNotifModule(reactContext: ReactApplicationContext) : ReactContex
     fun RestartSSEConnection() {
         Log.d("BackgroundNotifModule", "🔄 Restarting SSE connection...")
         try {
-            // متوقف کردن سرویس فعلی
+            // ابتدا همه اتصالات قبلی را کاملاً ببند
+            Log.d("BackgroundNotifModule", "🛑 Forcefully stopping all existing SSE connections...")
             val stopIntent = Intent(reactApplicationContext, TokenBackgroundService::class.java)
             reactApplicationContext.stopService(stopIntent)
             
-            // شروع مجدد سرویس
+            // صبر کن تا service کاملاً متوقف شود و cleanup انجام شود
+            Log.d("BackgroundNotifModule", "⏳ Waiting for complete cleanup...")
+            Thread.sleep(1500)
+            
+            // حالا service جدید را با اتصال fresh شروع کن
+            Log.d("BackgroundNotifModule", "▶️ Starting fresh SSE service after cleanup...")
             val startIntent = Intent(reactApplicationContext, TokenBackgroundService::class.java)
             reactApplicationContext.startService(startIntent)
             
-            Log.d("BackgroundNotifModule", "✅ SSE service restarted successfully")
+            Log.d("BackgroundNotifModule", "✅ SSE service restarted with fresh connection")
         } catch (e: Exception) {
             Log.e("BackgroundNotifModule", "❌ Failed to restart SSE service: ${e.message}")
         }
@@ -30,24 +36,33 @@ class BackgroundNotifModule(reactContext: ReactApplicationContext) : ReactContex
 
     @ReactMethod
     fun CheckTokenAndConnect() {
-        Log.d("BackgroundNotifModule", "🔍 Checking token and connecting to SSE...")
+        Log.d("BackgroundNotifModule", "🔍 Checking token and triggering immediate connection...")
         
         val token = getTokenFromDatabase()
         if (token != null) {
-            Log.d("BackgroundNotifModule", "✅ Token found, restarting SSE connection")
-            RestartSSEConnection()
+            Log.d("BackgroundNotifModule", "✅ Token found in database: ${token.take(20)}...")
+            
+            // فوری service رو trigger کن تا token جدید رو بخونه و اتصال برقرار کنه
+            Log.d("BackgroundNotifModule", "🚀 Triggering service to check token immediately...")
+            val triggerIntent = Intent(reactApplicationContext, TokenBackgroundService::class.java)
+            triggerIntent.putExtra("trigger_token_check", true)
+            reactApplicationContext.startService(triggerIntent)
+            
+            Log.d("BackgroundNotifModule", "✅ Service triggered for immediate token check")
         } else {
-            Log.w("BackgroundNotifModule", "⚠️ No token found, cannot connect to SSE")
+            Log.w("BackgroundNotifModule", "⚠️ No token found in database")
         }
     }
 
     @ReactMethod
     fun StartSSEService() {
-        Log.d("BackgroundNotifModule", "🚀 Starting SSE service...")
+        Log.d("BackgroundNotifModule", "🚀 Starting SSE service (smart mode)...")
         try {
-            val intent = Intent(reactApplicationContext, TokenBackgroundService::class.java)
-            reactApplicationContext.startService(intent)
-            Log.d("BackgroundNotifModule", "✅ SSE service started")
+            // فقط service را start کن، restart نکن مگر اینکه ضروری باشد
+            Log.d("BackgroundNotifModule", "▶️ Starting SSE service without forced restart...")
+            val startIntent = Intent(reactApplicationContext, TokenBackgroundService::class.java)
+            reactApplicationContext.startService(startIntent)
+            Log.d("BackgroundNotifModule", "✅ SSE service start command sent")
         } catch (e: Exception) {
             Log.e("BackgroundNotifModule", "❌ Failed to start SSE service: ${e.message}")
         }

@@ -24,13 +24,13 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       try {
         console.log('🚀 Initializing app...');
 
-        // اول همه اتصالات قبلی را قطع کن
-        try {
-          await BackgroundNotifModule?.StopSSEService();
-          console.log('🛑 Previous SSE connections stopped');
-        } catch (error) {
-          // نادیده بگیر اگر قبلاً متوقف بود
-        }
+        // // اول همه اتصالات قبلی را قطع کن
+        // try {
+        //   await BackgroundNotifModule?.StopSSEService();
+        //   console.log('🛑 Previous SSE connections stopped');
+        // } catch (error) {
+        //   // نادیده بگیر اگر قبلاً متوقف بود
+        // }
 
         // بررسی توکن و تعیین URL اولیه
         const existingToken = await TokenService.getValidAccessToken();
@@ -88,24 +88,15 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
         return;
       }
 
-      console.log('🔄 Initializing SSE connection...');
+      console.log('🔄 Initializing SSE connection for the FIRST time...');
 
-      // قطع کردن اتصالات قبلی
-      try {
-        await BackgroundNotifModule?.StopSSEService();
-        console.log('🛑 Previous connections stopped');
-      } catch (error) {
-        // نادیده بگیر
-      }
-
-      // یک مقدار صبر کن تا اتصالات قبلی کاملاً قطع شوند
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // شروع اتصال جدید
+      // فقط برای اولین بار service رو شروع کن (بدون stop)
       try {
         await BackgroundNotifModule?.StartSSEService();
         setConnectionInitialized(true);
-        console.log('✅ SSE Connection initialized successfully');
+        console.log(
+          '✅ SSE Connection initialized for first time successfully',
+        );
       } catch (error) {
         console.log('❌ SSE Connection failed:', error);
       }
@@ -128,16 +119,19 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
         if (!connectionInitialized) {
           await initializeSSEConnection();
         } else {
-          // اگر اتصال موجود است، فقط refresh کن
-          try {
-            await BackgroundNotifModule?.CheckTokenAndConnect();
-            console.log('🔄 SSE Connection refreshed with new token');
-          } catch (error) {
-            console.log('⚠️ SSE refresh failed:', error);
-          }
+          // // اگر اتصال موجود است، به service بگو که token جدید اومده
+          // console.log('🔄 Notifying service about new token...');
+          // // صبر کن تا AsyncStorage به SQLite sync بشه
+          // await BackgroundNotifModule?.CheckTokenAndConnect();
         }
       } else {
         console.log('❌ No token found in cookies');
+        // اگر اتصال موجود نیست و token هم نیست، connection نساز
+        if (!connectionInitialized) {
+          console.log(
+            '🚫 No token available, skipping connection initialization',
+          );
+        }
       }
     } catch (error) {
       console.error('❌ Error checking cookies:', error);
@@ -155,9 +149,11 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       );
       await checkAndSaveTokenFromCookies();
     } else {
-      console.log('✅ Connection already initialized, just checking tokens...');
-      // فقط توکن را چک کن بدون تغییر اتصال
-      await TokenService.getValidAccessToken();
+      console.log(
+        '✅ Connection already initialized, checking for new tokens...',
+      );
+      // همیشه token check کن و اگر جدید بود service رو trigger کن
+      await checkAndSaveTokenFromCookies();
     }
   };
 
@@ -167,9 +163,11 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
 
       if (data.type === 'CHECK_COOKIES') {
         console.log('📨 Received CHECK_COOKIES message - user logged in');
-        setTimeout(async () => {
-          await checkAndSaveTokenFromCookies();
-        }, 2000); // صبر کن تا cookies set شوند
+        // setTimeout(async () => {
+        //   await checkAndSaveTokenFromCookies();
+        // }, 2000); // صبر کن تا cookies set شوند
+        await BackgroundNotifModule?.RestartSSEConnection();
+
       }
 
       if (data.type === 'LOGOUT') {
@@ -179,13 +177,12 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
         await TokenService.clearTokens();
         await TokenService.clearCookies();
 
-        // توقف کامل SSE service و reset connection state
+        // ریستارت SSE service تا بدون توکن ادامه بده
         try {
-          await BackgroundNotifModule?.StopSSEService();
-          setConnectionInitialized(false);
-          console.log('🛑 SSE Service stopped and connection reset on logout');
+          await BackgroundNotifModule?.RestartSSEConnection();
+          console.log('🔄 SSE Service restarted without token after logout');
         } catch (error) {
-          console.log('⚠️ SSE stop failed on logout:', error);
+          console.log('⚠️ SSE restart failed on logout:', error);
         }
       }
     } catch (error) {

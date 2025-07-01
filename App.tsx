@@ -11,7 +11,6 @@ import {
 import {SafeAreaView} from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
 import ErrorHandler from './components/ErrorHandler';
-import Loader from './components/Loader';
 import SplashScreen from './components/SplashScreen';
 import Web from './components/Web';
 
@@ -123,7 +122,6 @@ export default function HomeScreen() {
         <ErrorHandler setHasError={setHasError} setLoading={setLoading} />
       ) : (
         <>
-          {loading && <Loader />}
           <Web
             setHasError={setHasError}
             setLoading={setLoading}
