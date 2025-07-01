@@ -21,6 +21,10 @@ import com.arkafile.MainActivity
 import android.provider.Settings
 import android.net.Uri
 import android.os.Build
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 
 class TokenBackgroundService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -60,6 +64,9 @@ class TokenBackgroundService : Service() {
     private val maxReconnectAttempts = Int.MAX_VALUE // unlimited retries
     private val reconnectDelaySeconds = longArrayOf(1, 2, 5, 10, 30, 60) // exponential backoff
     private var watchdogJob: Job? = null
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var lastNetworkRecoveryTime = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -72,7 +79,8 @@ class TokenBackgroundService : Service() {
         startForeground(NOTIFICATION_ID, createPersistentNotification())
         Log.d("SSE_DEBUG", "✅ Service initialization complete")
         
-      
+        // 🌐 شروع Network Monitoring با لاگ‌های کامل
+        startNetworkMonitoring()
         
         startWatchdog()
     }
@@ -160,6 +168,205 @@ class TokenBackgroundService : Service() {
             
         } catch (e: Exception) {
             Log.e("SSE_DEBUG", "❌ Error during connection cleanup: ${e.message}")
+        }
+    }
+
+    // 🌐 شروع Network Monitoring با لاگ‌های کامل
+    private fun startNetworkMonitoring() {
+        try {
+            Log.i("SSE_NETWORK", "🌐 ========== STARTING NETWORK MONITORING ==========")
+            connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            
+            // چک کردن وضعیت فعلی نتورک
+            checkCurrentNetworkStatus()
+            
+            networkCallback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    Log.i("SSE_NETWORK", "🔥 ========== NETWORK AVAILABLE TRIGGERED! ==========")
+                    Log.i("SSE_NETWORK", "🌐 Network: $network")
+                    
+                    // گرفتن network capabilities
+                    val capabilities = connectivityManager?.getNetworkCapabilities(network)
+                    if (capabilities != null) {
+                        val hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        val isValidated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                        val hasWifi = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                        val hasCellular = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                        
+                        Log.i("SSE_NETWORK", "📊 Network Capabilities:")
+                        Log.i("SSE_NETWORK", "   ✅ Has Internet: $hasInternet")
+                        Log.i("SSE_NETWORK", "   ✅ Is Validated: $isValidated")
+                        Log.i("SSE_NETWORK", "   📶 WiFi: $hasWifi")
+                        Log.i("SSE_NETWORK", "   📱 Cellular: $hasCellular")
+                        
+                        if (hasInternet && isValidated) {
+                            Log.i("SSE_NETWORK", "🚀 NETWORK IS READY! Starting instant reconnection...")
+                            triggerInstantReconnection()
+                        } else {
+                            Log.w("SSE_NETWORK", "⚠️ Network available but not ready (Internet: $hasInternet, Validated: $isValidated)")
+                        }
+                    } else {
+                        Log.w("SSE_NETWORK", "⚠️ Could not get network capabilities")
+                        // اگرچه capabilities نگرفتیم، ولی onAvailable اومده پس احتمالاً نتورک OK هست
+                        Log.i("SSE_NETWORK", "🤞 Trying reconnection anyway...")
+                        triggerInstantReconnection()
+                    }
+                }
+
+                override fun onLost(network: Network) {
+                    Log.w("SSE_NETWORK", "🔴 ========== NETWORK LOST! ==========")
+                    Log.w("SSE_NETWORK", "🌐 Lost Network: $network")
+                    Log.w("SSE_NETWORK", "🔌 SSE connection will fail and trigger retry cycle")
+                }
+
+                override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                    val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    val isValidated = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                    val hasWifi = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                    val hasCellular = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                    
+                    Log.d("SSE_NETWORK", "🔄 Network capabilities changed:")
+                    Log.d("SSE_NETWORK", "   📊 Internet: $hasInternet, Validated: $isValidated")
+                    Log.d("SSE_NETWORK", "   📶 WiFi: $hasWifi, Cellular: $hasCellular")
+                    
+                    if (hasInternet && isValidated && eventSource == null) {
+                        Log.i("SSE_NETWORK", "🌟 Network became validated and we have no connection - triggering reconnect!")
+                        triggerInstantReconnection()
+                    }
+                }
+                
+                override fun onUnavailable() {
+                    Log.e("SSE_NETWORK", "🔴 NETWORK UNAVAILABLE!")
+                }
+            }
+            
+            // ثبت network callback برای همه نوع اتصالات
+            val networkRequest = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                .build()
+                
+            connectivityManager?.registerNetworkCallback(networkRequest, networkCallback!!)
+            Log.i("SSE_NETWORK", "✅ Network monitoring callback registered successfully!")
+            
+        } catch (e: Exception) {
+            Log.e("SSE_NETWORK", "❌ Failed to start network monitoring: ${e.message}")
+            Log.e("SSE_NETWORK", "💥 Exception: ${e.javaClass.simpleName}")
+            e.printStackTrace()
+        }
+    }
+    
+    private fun checkCurrentNetworkStatus() {
+        try {
+            Log.i("SSE_NETWORK", "🔍 ========== CHECKING CURRENT NETWORK STATUS ==========")
+            
+            val activeNetwork = connectivityManager?.activeNetwork
+            if (activeNetwork != null) {
+                Log.i("SSE_NETWORK", "🌐 Active network found: $activeNetwork")
+                
+                val capabilities = connectivityManager?.getNetworkCapabilities(activeNetwork)
+                if (capabilities != null) {
+                    val hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    val isValidated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                    val hasWifi = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                    val hasCellular = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                    
+                    Log.i("SSE_NETWORK", "📊 Current Network Status:")
+                    Log.i("SSE_NETWORK", "   ✅ Has Internet: $hasInternet")
+                    Log.i("SSE_NETWORK", "   ✅ Is Validated: $isValidated")
+                    Log.i("SSE_NETWORK", "   📶 WiFi: $hasWifi")
+                    Log.i("SSE_NETWORK", "   📱 Cellular: $hasCellular")
+                    
+                    if (hasInternet && isValidated) {
+                        Log.i("SSE_NETWORK", "🚀 Current network is READY for connections!")
+                    } else {
+                        Log.w("SSE_NETWORK", "⚠️ Current network has issues (Internet: $hasInternet, Validated: $isValidated)")
+                    }
+                } else {
+                    Log.w("SSE_NETWORK", "⚠️ Could not get network capabilities for active network")
+                }
+            } else {
+                Log.w("SSE_NETWORK", "🔴 NO ACTIVE NETWORK FOUND!")
+            }
+            
+            // چک کردن همه networks موجود
+            val allNetworks = connectivityManager?.allNetworks
+            Log.i("SSE_NETWORK", "📋 Total available networks: ${allNetworks?.size ?: 0}")
+            allNetworks?.forEachIndexed { index, network ->
+                Log.d("SSE_NETWORK", "   📡 Network $index: $network")
+            }
+            
+        } catch (e: Exception) {
+            Log.e("SSE_NETWORK", "❌ Error checking network status: ${e.message}")
+        }
+    }
+    
+    private fun triggerInstantReconnection() {
+        Log.i("SSE_NETWORK", "🚀 ========== TRIGGERING INSTANT RECONNECTION ==========")
+        
+        // Debounce: جلوگیری از multiple rapid reconnections
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastNetworkRecoveryTime < 5000) {
+            Log.d("SSE_NETWORK", "⏰ Debounce: Ignoring rapid reconnection request (last: ${currentTime - lastNetworkRecoveryTime}ms ago)")
+            return
+        }
+        lastNetworkRecoveryTime = currentTime
+        
+        serviceScope.launch {
+            try {
+                Log.i("SSE_NETWORK", "⏱️ Waiting 2 seconds for network stability...")
+                delay(2000) // 2 ثانیه صبر تا اینترنت کاملاً stable بشه
+                
+                Log.i("SSE_NETWORK", "🔍 Current service state: isRunning=$isRunning, eventSource=${eventSource != null}")
+                
+                if (isRunning && eventSource == null) {
+                    Log.i("SSE_NETWORK", "✅ Perfect! Service running but no connection - starting instant SSE connection...")
+                    
+                    // Reset reconnection attempts برای fresh start
+                    val oldAttempts = reconnectAttempts
+                    reconnectAttempts = 0
+                    Log.i("SSE_NETWORK", "🔄 Reset reconnect attempts: $oldAttempts → 0")
+                    
+                    // Cancel any pending reconnect jobs
+                    val hadPendingJob = reconnectJob != null
+                    reconnectJob?.cancel()
+                    reconnectJob = null
+                    Log.i("SSE_NETWORK", "⏰ Canceled pending reconnect jobs: $hadPendingJob")
+                    
+                    // فوری شروع اتصال
+                    Log.i("SSE_NETWORK", "🔌 Starting fresh SSE connection NOW!")
+                    startSSEConnection()
+                    
+                } else if (isRunning && eventSource != null) {
+                    Log.w("SSE_NETWORK", "🔄 Network back but connection exists - this might be a stuck connection!")
+                    Log.i("SSE_NETWORK", "🔧 Force restarting connection to ensure it works with new network...")
+                    
+                    // Connection موجوده ولی ممکنه stuck باشه - بیایید force restart کنیم
+                    Log.i("SSE_NETWORK", "🧹 Closing potentially stuck connection...")
+                    eventSource?.cancel()
+                    eventSource = null
+                    
+                    // Cancel any pending reconnect jobs
+                    reconnectJob?.cancel()
+                    reconnectJob = null
+                    
+                    // Reset attempts for fresh start
+                    reconnectAttempts = 0
+                    
+                    Log.i("SSE_NETWORK", "🔌 Starting fresh SSE connection after network recovery...")
+                    startSSEConnection()
+                    
+                } else if (!isRunning) {
+                    Log.w("SSE_NETWORK", "⏹️ Service not running, ignoring network availability")
+                    
+                } else {
+                    Log.w("SSE_NETWORK", "❓ Unexpected state - doing nothing")
+                }
+                
+            } catch (e: Exception) {
+                Log.e("SSE_NETWORK", "❌ Error in instant reconnection: ${e.message}")
+                e.printStackTrace()
+            }
         }
     }
 
@@ -658,6 +865,18 @@ class TokenBackgroundService : Service() {
         
         watchdogJob?.cancel()
         Log.d("SSE_DEBUG", "🐕 Watchdog job canceled")
+        
+        // 🌐 توقف Network Monitoring
+        try {
+            if (networkCallback != null && connectivityManager != null) {
+                connectivityManager?.unregisterNetworkCallback(networkCallback!!)
+                Log.i("SSE_NETWORK", "🌐 Network monitoring stopped successfully")
+            } else {
+                Log.d("SSE_NETWORK", "🌐 Network monitoring was not active")
+            }
+        } catch (e: Exception) {
+            Log.e("SSE_NETWORK", "❌ Error stopping network monitoring: ${e.message}")
+        }
         
         serviceScope.cancel()
         Log.d("SSE_DEBUG", "🔄 Service scope canceled")
