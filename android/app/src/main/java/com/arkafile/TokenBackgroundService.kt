@@ -45,6 +45,10 @@ class TokenBackgroundService : Service() {
     private val reconnectAttempts = AtomicInteger(0)
     private val lastNetworkRecoveryTime = AtomicLong(0)
     
+    // 🔑 Current token storage (thread-safe)
+    @Volatile
+    private var currentToken: String? = null
+    
     // 🌐 Network & Connection Management
     private var eventSource: EventSource? = null
     private var reconnectJob: Job? = null
@@ -90,6 +94,23 @@ class TokenBackgroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "🎯 onStartCommand called")
+        
+        // Handle specific actions
+        val action = intent?.getStringExtra("action")
+        
+        when (action) {
+            "set_token" -> {
+                val token = intent?.getStringExtra("token")
+                if (token != null) {
+                    handleSetToken(token)
+                    return START_STICKY
+                }
+            }
+            "clear_token" -> {
+                handleClearToken()
+                return START_STICKY
+            }
+        }
         
         val triggerTokenCheck = intent?.getBooleanExtra("trigger_token_check", false) ?: false
         
@@ -178,13 +199,9 @@ class TokenBackgroundService : Service() {
         Log.d(TAG, "🔌 Starting fresh SSE connection")
         
         try {
-            val token = getTokenSimple()
+            // 🔑 Priority: Use currentToken first, then database fallback
+            val token = currentToken ?: getTokenSimple()
             val sseUrl = "${AppConfig.SSE_BASE_URL}${AppConfig.SSE_ENDPOINT}"
-            
-            Log.d(TAG, "🌐 Connecting to: $sseUrl")
-            if (token != null) {
-                Log.d(TAG, "🔑 Using token: ${token.take(20)}...")
-            }
             
             val requestBuilder = Request.Builder()
                 .url(sseUrl)
@@ -192,8 +209,14 @@ class TokenBackgroundService : Service() {
                 .addHeader("Cache-Control", "no-cache")
                 .addHeader("Connection", "keep-alive")
                 .addHeader("User-Agent", AppConfig.USER_AGENT)
-                
-            token?.let { requestBuilder.addHeader("Authorization", "Bearer $it") }
+
+            token?.let { 
+                Log.i(TAG, "🔑 Using tokenUsing tokenUsing tokenUsing tokenUsing tokenUsing tokenUsing tokenUsing token: $it")
+            }
+
+            token?.let { 
+                requestBuilder.addHeader("Authorization", "Bearer $it")
+            }
             
             eventSource = EventSources.createFactory(httpClient)
                 .newEventSource(requestBuilder.build(), createEventSourceListener())
@@ -566,6 +589,38 @@ class TokenBackgroundService : Service() {
             .setOngoing(true)
             .setAutoCancel(false)
             .build()
+
+    // 🔑 Set token directly and restart connection
+    private fun handleSetToken(token: String) {
+        serviceScope.launch {
+            try {
+                currentToken = token
+                
+                if (isRunning.get()) {
+                    restartConnectionSafely()
+                }
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error setting token: ${e.message}")
+            }
+        }
+    }
+
+    // 🗑️ Clear token and restart connection
+    private fun handleClearToken() {
+        serviceScope.launch {
+            try {
+                currentToken = null
+                
+                if (isRunning.get()) {
+                    restartConnectionSafely()
+                }
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing token: ${e.message}")
+            }
+        }
+    }
 
     override fun onDestroy() {
         super.onDestroy()

@@ -155,7 +155,47 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     }
   }, [isInitialized]);
 
-  // 🔍 Smart token check and sync
+  // 🔄 Retry token search with timeout
+  const waitForToken = useCallback(
+    async (maxTimeoutSeconds: number = 30): Promise<string | null> => {
+      const startTime = Date.now();
+      const timeout = maxTimeoutSeconds * 1000;
+      let attempt = 0;
+
+      while (Date.now() - startTime < timeout) {
+        attempt++;
+
+        try {
+          // Try multiple sources
+          let token = await TokenService.getValidAccessToken();
+
+          if (!token) {
+            token = await TokenService.forceSyncFromCookies();
+          }
+
+          if (!token) {
+            const cookieTokens = await TokenService.getTokensFromCookies();
+            token = cookieTokens?.token || null;
+          }
+
+          if (token && token.length > 10) {
+            return token;
+          }
+
+          // Wait before next attempt (exponential backoff)
+          const delay = Math.min(1000 + attempt * 500, 3000);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } catch (error) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      return null;
+    },
+    [],
+  );
+
+  // 🔍 Smart token check and sync with retry
   const syncTokenFromCookies = useCallback(async () => {
     try {
       // Prevent concurrent token checks
@@ -165,34 +205,43 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       }
 
       setTokenCheckInProgress(true);
-      safeLog.info('Syncing token from cookies...');
 
-      const newToken = await TokenService.forceSyncFromCookies();
+      const newToken = await waitForToken(30);
 
       if (newToken) {
-        safeLog.info('Token synced successfully from cookies');
+        try {
+          await BackgroundNotifModule?.SetToken(newToken);
+        } catch (serviceError) {
+          // Silent fail
+        }
 
-        // Restart SSE connection with new token
         if (isInitialized) {
-          safeLog.info('Restarting SSE connection with new token...');
           await BackgroundNotifModule?.RestartConnection();
         } else {
           await initializeSSEConnection();
         }
       } else {
-        safeLog.info('No token found in cookies');
-
-        // Start connection without token if not already initialized
         if (!isInitialized) {
           await initializeSSEConnection();
         }
       }
     } catch (error) {
-      safeLog.error('Error syncing token from cookies', error);
+      if (!isInitialized) {
+        try {
+          await initializeSSEConnection();
+        } catch (connectionError) {
+          // Silent fail
+        }
+      }
     } finally {
       setTokenCheckInProgress(false);
     }
-  }, [tokenCheckInProgress, isInitialized, initializeSSEConnection]);
+  }, [
+    tokenCheckInProgress,
+    isInitialized,
+    initializeSSEConnection,
+    waitForToken,
+  ]);
 
   // 📱 Handle WebView load completion
   const handleLoadEnd = useCallback(async () => {
@@ -211,31 +260,43 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   }, [isInitialized, tokenCheckInProgress, syncTokenFromCookies]);
 
   // 📨 Handle messages from WebView
-  const handleMessage = useCallback(async (event: any) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
+  const handleMessage = useCallback(
+    async (event: any) => {
+      try {
+        const data = JSON.parse(event.nativeEvent.data);
 
-      switch (data.type) {
-        case 'CHECK_COOKIES':
-          safeLog.info('User logged in - syncing token');
-          await BackgroundNotifModule?.RestartConnection();
-          break;
+        switch (data.type) {
+          case 'CHECK_COOKIES':
+            try {
+              const existingToken = await waitForToken(60);
 
-        case 'LOGOUT':
-          safeLog.info('User logged out - clearing tokens');
-          await TokenService.clearTokens();
-          await TokenService.clearCookies();
-          await BackgroundNotifModule?.RestartConnection();
-          break;
+              if (existingToken) {
+                await BackgroundNotifModule?.SetToken(existingToken);
+                await BackgroundNotifModule?.RestartConnection();
+              } else {
+                await BackgroundNotifModule?.RestartConnection();
+              }
+            } catch (error) {
+              await BackgroundNotifModule?.RestartConnection();
+            }
+            break;
 
-        default:
-          // Ignore non-JSON or unrecognized messages
-          break;
+          case 'LOGOUT':
+            await TokenService.clearTokens();
+            await TokenService.clearCookies();
+            await BackgroundNotifModule?.RestartConnection();
+            break;
+
+          default:
+            // Ignore non-JSON or unrecognized messages
+            break;
+        }
+      } catch (error) {
+        // Silent handling for non-JSON messages - this is normal
       }
-    } catch (error) {
-      // Silent handling for non-JSON messages - this is normal
-    }
-  }, []);
+    },
+    [waitForToken],
+  );
 
   // 🚨 Handle WebView errors
   const handleError = useCallback(

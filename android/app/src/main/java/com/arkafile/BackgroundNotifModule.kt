@@ -30,24 +30,18 @@ class BackgroundNotifModule(reactContext: ReactApplicationContext) : ReactContex
     // 🎯 Unified method for starting SSE connection
     @ReactMethod
     fun StartConnection(promise: Promise? = null) {
-        Log.i(TAG, "🎯 UNIFIED START CONNECTION - Primary method for SSE initialization")
-        
         moduleScope.launch {
             try {
                 delay(500)
-                val token = getTokenFromDatabase()
-                Log.i(TAG, if (token != null) "✅ Token found" else "⚠️ No token")
                 
                 val startIntent = Intent(reactApplicationContext, TokenBackgroundService::class.java).apply {
                     putExtra("trigger_token_check", true)
                 }
                 
                 reactApplicationContext.startService(startIntent)
-                Log.i(TAG, "✅ Service started")
                 promise?.resolve("Started")
                 
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Start error: ${e.message}")
                 promise?.reject("ERROR", e.message)
             }
         }
@@ -148,6 +142,53 @@ class BackgroundNotifModule(reactContext: ReactApplicationContext) : ReactContex
         } catch (e: Exception) {
             Log.e(TAG, "❌ Token error: ${e.message}")
             null
+        }
+    }
+
+    // 🔑 Send token directly to service
+    @ReactMethod
+    fun SetToken(token: String, promise: Promise? = null) {
+        Log.i(TAG, "🔑 SETTING TOKEN directly in service")
+        
+        moduleScope.launch {
+            try {
+                Log.d(TAG, "📤 Sending token to service: ${token.take(20)}...")
+                
+                val intent = Intent(reactApplicationContext, TokenBackgroundService::class.java).apply {
+                    putExtra("action", "set_token")
+                    putExtra("token", token)
+                }
+                
+                reactApplicationContext.startService(intent)
+                Log.i(TAG, "✅ Token sent to service successfully")
+                promise?.resolve("Token set")
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to set token: ${e.message}")
+                promise?.reject("TOKEN_ERROR", e.message)
+            }
+        }
+    }
+
+    // 🗑️ Clear token from service
+    @ReactMethod
+    fun ClearToken(promise: Promise? = null) {
+        Log.i(TAG, "🗑️ CLEARING TOKEN from service")
+        
+        moduleScope.launch {
+            try {
+                val intent = Intent(reactApplicationContext, TokenBackgroundService::class.java).apply {
+                    putExtra("action", "clear_token")
+                }
+                
+                reactApplicationContext.startService(intent)
+                Log.i(TAG, "✅ Token cleared from service")
+                promise?.resolve("Token cleared")
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to clear token: ${e.message}")
+                promise?.reject("TOKEN_ERROR", e.message)
+            }
         }
     }
 

@@ -1,5 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CookieManager from '@react-native-cookies/cookies';
+import {NativeModules} from 'react-native';
+
+const {BackgroundNotifModule} = NativeModules;
 
 export interface Token {
   token?: string;
@@ -20,27 +23,19 @@ export class TokenService {
       for (const domain of this.DOMAINS) {
         try {
           const cookies = await CookieManager.get(`https://www.${domain}`);
-          console.log(`Retrieved cookies from ${domain}:`, cookies);
 
-          // Extract token if found
           if (cookies.token && cookies.token.value) {
             tokenData.token = cookies.token.value;
-            console.log(`✅ Token found in ${domain} cookies`);
-            break; // Use first found token
+            break;
           }
 
-          // Also check without www
           const cookiesNonWWW = await CookieManager.get(`https://${domain}`);
           if (cookiesNonWWW.token && cookiesNonWWW.token.value) {
             tokenData.token = cookiesNonWWW.token.value;
-            console.log(`✅ Token found in ${domain} cookies (non-www)`);
             break;
           }
         } catch (domainError) {
-          console.log(
-            `⚠️ Could not get cookies from ${domain}:`,
-            (domainError as Error).message || domainError,
-          );
+          // Silent fail
         }
       }
 
@@ -52,7 +47,7 @@ export class TokenService {
   }
 
   /**
-   * Save token to local storage
+   * Save token to local storage and send to service
    */
   static async saveTokens(tokens: Token): Promise<boolean> {
     try {
@@ -62,7 +57,16 @@ export class TokenService {
       };
 
       await AsyncStorage.setItem(this.TOKEN_KEY, JSON.stringify(tokenData));
-      console.log('Token saved successfully');
+
+      // Send token directly to background service
+      if (tokens.token && BackgroundNotifModule?.SetToken) {
+        try {
+          await BackgroundNotifModule.SetToken(tokens.token);
+        } catch (serviceError) {
+          // Silent fail
+        }
+      }
+
       return true;
     } catch (error) {
       console.error('Error saving token:', error);
@@ -89,12 +93,21 @@ export class TokenService {
   }
 
   /**
-   * Clear stored token
+   * Clear stored token and notify service
    */
   static async clearTokens(): Promise<boolean> {
     try {
       await AsyncStorage.removeItem(this.TOKEN_KEY);
-      console.log('Token cleared successfully');
+
+      // Clear token from background service
+      if (BackgroundNotifModule?.ClearToken) {
+        try {
+          await BackgroundNotifModule.ClearToken();
+        } catch (serviceError) {
+          // Silent fail
+        }
+      }
+
       return true;
     } catch (error) {
       console.error('Error clearing token:', error);
@@ -125,20 +138,15 @@ export class TokenService {
       let tokens = await this.getTokensFromCookies();
 
       if (tokens && tokens.token) {
-        // Save newly retrieved tokens to storage
         await this.saveTokens(tokens);
-        console.log('✅ Token found in cookies and saved to storage');
         return tokens.token;
       }
 
-      // If no cookies, try storage as fallback
       tokens = await this.getStoredTokens();
       if (tokens && tokens.token) {
-        console.log('⚠️ Token found only in storage (cookies may be expired)');
         return tokens.token;
       }
 
-      console.log('❌ No valid token found');
       return null;
     } catch (error) {
       console.error('Error getting valid token:', error);
@@ -168,7 +176,6 @@ export class TokenService {
 
       if (cookieTokens) {
         await this.saveTokens(cookieTokens);
-        console.log('Token synced from cookies');
         return cookieTokens;
       }
 
@@ -200,10 +207,7 @@ export class TokenService {
             allCookies[domain] = cookiesNonWWW;
           }
         } catch (domainError) {
-          console.log(
-            `⚠️ Could not get cookies from ${domain} for debugging:`,
-            (domainError as Error).message || domainError,
-          );
+          // Silent fail
         }
       }
 
@@ -219,29 +223,30 @@ export class TokenService {
    */
   static async forceSyncFromCookies(): Promise<string | null> {
     try {
-      console.log('🔄 Smart syncing token from cookies...');
-
-      // Get current stored token
       const storedTokens = await this.getStoredTokens();
       const storedToken = storedTokens?.token;
 
-      // Get fresh token from cookies
       const cookieTokens = await this.getTokensFromCookies();
       const cookieToken = cookieTokens?.token;
 
       if (cookieToken) {
-        // Only update if different from stored token
         if (storedToken !== cookieToken) {
           await this.saveTokens({token: cookieToken});
-          console.log('✅ Token updated - was different from stored version');
           return cookieToken;
         } else {
-          console.log('✅ Token unchanged - same as stored version');
+          // Even if unchanged, ensure service has the token
+          if (BackgroundNotifModule?.SetToken) {
+            try {
+              await BackgroundNotifModule.SetToken(cookieToken);
+            } catch (serviceError) {
+              // Silent fail
+            }
+          }
+
           return cookieToken;
         }
       }
 
-      console.log('❌ No token found in cookies during sync');
       return null;
     } catch (error) {
       console.error('Error syncing token:', error);
