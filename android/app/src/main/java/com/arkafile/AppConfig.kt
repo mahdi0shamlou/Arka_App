@@ -2,8 +2,8 @@ package com.arkafile
 
 object AppConfig {
     // 🔐 Secure SSE Configuration
-    const val SSE_BASE_URL = "http://185.190.39.252:7575/sse"
-    const val SSE_ENDPOINT = "/1"
+    const val SSE_BASE_URL = "https://notification.arkafile.info/sse"
+    const val SSE_ENDPOINT = ""
     
     // ⏱️ Timing Configuration
     const val CONNECTION_TIMEOUT_SECONDS = 30L

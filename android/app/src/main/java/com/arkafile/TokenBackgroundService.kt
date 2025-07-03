@@ -211,11 +211,16 @@ class TokenBackgroundService : Service() {
                 .addHeader("User-Agent", AppConfig.USER_AGENT)
 
             token?.let { 
-                Log.i(TAG, "🔑 Using tokenUsing tokenUsing tokenUsing tokenUsing tokenUsing tokenUsing tokenUsing token: $it")
-            }
-
-            token?.let { 
                 requestBuilder.addHeader("Authorization", "Bearer $it")
+            }
+            
+            // Log request headers for debugging
+            val request = requestBuilder.build()
+            Log.i(TAG, "🔗 SSE Request URL: ${request.url}")
+            Log.i(TAG, "📋 Request Headers:")
+            request.headers.forEach { (name, value) ->
+               
+                Log.i(TAG, "  $name: $value")
             }
             
             eventSource = EventSources.createFactory(httpClient)
