@@ -23,7 +23,7 @@ object AppConfig {
     
     // 🔄 Retry Configuration
     const val MAX_RECONNECT_ATTEMPTS = 2147483647 // Int.MAX_VALUE
-    val RECONNECT_DELAYS = arrayOf(2L, 5L, 10L, 30L, 60L) // seconds
+    val RECONNECT_DELAYS = arrayOf(2L, 5L, 10L, 20L) // seconds
     
     // 🗃️ Database Configuration
     const val DB_NAME = "RKStorage"

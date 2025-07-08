@@ -16,6 +16,9 @@ import android.provider.Settings
 import android.net.Uri
 import android.app.AlertDialog
 import android.widget.Toast
+import kotlin.math.absoluteValue 
+import android.app.NotificationManager
+import android.content.Context
 
 /**
  * 🔧 Optimized Main Activity
@@ -70,33 +73,42 @@ class MainActivity : ReactActivity() {
         handleNotificationIntent()
     }
     
-    /**
-     * 📨 Handle intent data from notifications
-     */
+  
     private fun handleNotificationIntent() {
         try {
             val fromNotification = intent?.getBooleanExtra("from_notification", false) ?: false
             if (fromNotification) {
                 val title = intent?.getStringExtra("notification_title")
                 val body = intent?.getStringExtra("notification_body")
+                val id = intent?.getStringExtra("notification_id")
+                val type = intent?.getStringExtra("notification_type") ?: "null"
+                val details = intent?.getStringExtra("notification_details") ?: "null"
                 
-                Log.i(TAG, "📨 Opened from notification: $title")
-                
-                // Show toast to user
-                if (!title.isNullOrBlank()) {
-                    Toast.makeText(this, "📨 $title", Toast.LENGTH_SHORT).show()
+    
+                Log.i("NotifAction", "📨 Notification opened:")
+                Log.d("NotifAction", "🔹 title: $title")
+                Log.d("NotifAction", "🔹 body: $body")
+                Log.d("NotifAction", "🔹 id: $id")
+                Log.d("NotifAction", "🔹 type: $type")
+                Log.d("NotifAction", "🔹 details: $details")
+    
+                if (type == "file" || type == "customer") {
+                    Log.d("NotifAction", "✅ Special action for type: $type → details: $details")
+                } else {
+                    Log.d("NotifAction", "ℹ️ No special handling for type: $type")
                 }
-                
-                // You can add additional handling here like navigating to specific screen
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                val intId = id.hashCode().absoluteValue
+                notificationManager.cancel(intId)
+               
             }
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error handling notification intent: ${e.message}")
         }
     }
     
-    /**
-     * 🔔 Smart notification permission management
-     */
+    
+   
     private fun checkAndRequestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val permission = Manifest.permission.POST_NOTIFICATIONS

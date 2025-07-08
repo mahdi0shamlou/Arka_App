@@ -24,6 +24,7 @@ import android.net.NetworkRequest
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.absoluteValue 
 
 /**
  * 🔧 Optimized SSE Background Service
@@ -251,7 +252,7 @@ class TokenBackgroundService : Service() {
         override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
             Log.i(TAG, "🎉 SSE Event received!")
             Log.d(TAG, "📨 Type: ${type ?: "default"}, Data length: ${data.length}")
-            
+            Log.i(TAG , "${type}")
             try {
                 when (type) {
                     "notification", null -> processNotificationEvent(data)
@@ -293,7 +294,7 @@ class TokenBackgroundService : Service() {
     // 📨 Process notification events
     private fun processNotificationEvent(data: String) {
         Log.d(TAG, "🔍 Processing notification data")
-        
+            Log.d(TAG, "${data}")
         try {
             // Try parsing as JSON array first
             val jsonArray = org.json.JSONArray(data)
@@ -301,7 +302,11 @@ class TokenBackgroundService : Service() {
                 val lastItem = jsonArray.getJSONObject(jsonArray.length() - 1)
                 val title = lastItem.optString("title", "ArkaFile")
                 val body = lastItem.optString("body", "اعلان جدید")
-                showNotification(title, body)
+                val type = lastItem.optString("type", "general")      // مقدار پیش‌فرض: general
+                val details = lastItem.optString("details", "")       // مقدار پیش‌فرض: خالی
+                val id = lastItem.optString("id")       // مقدار پیش‌فرض: خالی
+            
+                showNotification(title, body, type, details , id)
                 return
             }
         } catch (arrayException: Exception) {
@@ -310,11 +315,14 @@ class TokenBackgroundService : Service() {
                 val jsonObject = org.json.JSONObject(data)
                 val title = jsonObject.optString("title", "ArkaFile")
                 val body = jsonObject.optString("body", "اعلان جدید")
-                showNotification(title, body)
+                val type = jsonObject.optString("type", "general")      // مقدار پیش‌فرض: general
+                val details = jsonObject.optString("details", "")       // مقدار پیش‌فرض: خالی
+                val id = jsonObject.optString("id")       // مقدار پیش‌فرض: خالی
+                showNotification(title, body, type , details , id)
                 return
             } catch (objectException: Exception) {
                 Log.w(TAG, "⚠️ Failed to parse JSON, showing raw data")
-                showNotification("ArkaFile", data.take(100))
+                showNotification("ArkaFile", data.take(100) , "general" , "" ,"")
             }
         }
     }
@@ -502,26 +510,28 @@ class TokenBackgroundService : Service() {
     }
 
     // 📱 Optimized notification system
-    private fun showNotification(title: String, body: String) {
+    private fun showNotification(title: String, body: String, type: String, details: String , id: String) {
         try {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            
+    
+            // 👇 Intent برای باز کردن MainActivity با داده‌ها
             val intent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                        Intent.FLAG_ACTIVITY_CLEAR_TASK or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra("from_notification", true)
                 putExtra("notification_title", title)
                 putExtra("notification_body", body)
+                putExtra("notification_type", type)
+                putExtra("notification_details", details)
+                putExtra("notification_id", id)
             }
-            
+    
             val pendingIntent = PendingIntent.getActivity(
-                this, 
-                System.currentTimeMillis().toInt(),
-                intent, 
+                this,
+                0,
+                intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            
+    
             val notification = NotificationCompat.Builder(this, AppConfig.NOTIFICATION_CHANNEL_ID)
                 .setContentTitle(title)
                 .setContentText(body)
@@ -529,27 +539,31 @@ class TokenBackgroundService : Service() {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setStyle(NotificationCompat.BigTextStyle()
-                    .bigText(body)
-                    .setBigContentTitle(title)
-                    .setSummaryText("ArkaFile"))
-                .setContentIntent(pendingIntent)
+                .setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .bigText("$body\n\n$details")
+                        .setBigContentTitle(title)
+                        .setSummaryText("ArkaFile - $type")
+                )
+                .setContentIntent(pendingIntent) // ← هم برای خود نوتیفیکیشن، هم اکشن
                 .addAction(android.R.drawable.ic_menu_view, "مشاهده", pendingIntent)
                 .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setWhen(System.currentTimeMillis())
                 .setShowWhen(true)
                 .setAutoCancel(true)
                 .build()
-                
-            val notificationId = (System.currentTimeMillis() % 2147483647).toInt()
-            notificationManager.notify(notificationId, notification)
-            
-            Log.i(TAG, "✅ Notification displayed: $title")
-            
+    
+            notificationManager.notify(id.hashCode().absoluteValue, notification)
+    
+            Log.i(TAG, "✅ Notification displayed: $title ($type)")
+    
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to show notification: ${e.message}")
         }
     }
+    
+    
+    
 
     // 📱 Notification channel setup
     private fun initializeNotificationChannels() {

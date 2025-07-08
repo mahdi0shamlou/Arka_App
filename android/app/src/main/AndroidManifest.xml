@@ -38,7 +38,7 @@
     </activity>
     <meta-data  android:name="com.dieam.reactnativepushnotification.notification_foreground" android:value="false"/>
     <meta-data  android:name="com.dieam.reactnativepushnotification.notification_color" android:resource="@android:color/white"/>
-    
+    <receiver android:name=".NotificationActionReceiver" android:exported="false"/>
      <receiver android:name="com.dieam.reactnativepushnotification.modules.RNPushNotificationActions" android:exported="false" />
     <receiver android:name="com.dieam.reactnativepushnotification.modules.RNPushNotificationPublisher" android:exported="false" />
     <receiver android:name="com.dieam.reactnativepushnotification.modules.RNPushNotificationBootEventReceiver" android:exported="true">
