@@ -33,8 +33,9 @@ class MainActivity : ReactActivity() {
         private const val NOTIFICATION_PERMISSION_REQUEST = 1001
         private const val TAG = "MainActivity"
         private const val PERMISSION_DIALOG_SHOWN_KEY = "permission_dialog_shown"
+        var pendingNavigationPath: String? = null
     }
-
+   
     /**
      * Returns the name of the main component registered from JavaScript.
      */
@@ -91,11 +92,24 @@ class MainActivity : ReactActivity() {
                 Log.d("NotifAction", "🔹 id: $id")
                 Log.d("NotifAction", "🔹 type: $type")
                 Log.d("NotifAction", "🔹 details: $details")
-    
-                if (type == "file" || type == "customer") {
-                    Log.d("NotifAction", "✅ Special action for type: $type → details: $details")
-                } else {
-                    Log.d("NotifAction", "ℹ️ No special handling for type: $type")
+
+                // Handle different notification types
+                when (type) {
+                    "file" -> {
+                        val fileId = details ?: "2154685" // Default file ID
+                        pendingNavigationPath = "/dashboard/files-mobile/2154685"
+                        Log.d("NotifAction", "📁 File notification → path: $pendingNavigationPath")
+                    }
+                    "customer" -> {
+                        pendingNavigationPath = "/dashboard/customers"
+
+                        Log.d("NotifAction", "👤 Customer notification → path: $pendingNavigationPath")
+                    }
+                    else -> {
+                        Log.d("NotifAction", "ℹ️ No special navigation for type: $type")
+                        // Clear any pending path for unknown types
+                        pendingNavigationPath = null
+                    }
                 }
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 val intId = id.hashCode().absoluteValue

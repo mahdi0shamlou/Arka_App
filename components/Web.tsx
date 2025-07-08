@@ -343,6 +343,103 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     [setCanGoBack],
   );
 
+  // 📱 Handle notification navigation with proper timing
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    const checkPendingNavigation = async () => {
+      try {
+        safeLog.info('Checking for pending navigation...');
+
+        if (!BackgroundNotifModule?.getPendingPath) {
+          safeLog.warn('getPendingPath method not available');
+          return;
+        }
+
+        const path = await BackgroundNotifModule.getPendingPath();
+        safeLog.info('Pending path received:', path);
+
+        if (path && path.trim() && webViewRef.current) {
+          // Wait a bit to ensure WebView is fully loaded
+          setTimeout(() => {
+            try {
+              const jsCode = `
+                (function() {
+                  try {
+                    console.log('🚀 Next.js Navigation to: ${path}');
+                    
+                    // Check if we're already on the target path
+                    if (window.location.pathname === "${path}") {
+                      console.log('✅ Already on target path');
+                      return true;
+                    }
+                    
+                    // Next.js navigation - try multiple methods
+                    
+                    // Method 1: Use Next.js router if available
+                    if (window.next && window.next.router) {
+                      window.next.router.push("${path}");
+                      console.log('✅ Navigation via Next.js router');
+                      return true;
+                    }
+                    
+                    // Method 2: Try global router variable (some Next.js setups)
+                    if (window.__NEXT_ROUTER__) {
+                      window.__NEXT_ROUTER__.push("${path}");
+                      console.log('✅ Navigation via __NEXT_ROUTER__');
+                      return true;
+                    }
+                    
+                    // Method 3: Direct navigation - works best with Next.js
+                    window.location.href = "${path}";
+                    console.log('✅ Navigation via location.href');
+                    
+                  } catch (e) {
+                    console.error('❌ Navigation error:', e);
+                    // Fallback
+                    try {
+                      window.location.href = "${path}";
+                    } catch (fallbackError) {
+                      console.error('❌ Fallback navigation failed:', fallbackError);
+                    }
+                  }
+                  return true;
+                })();
+              `;
+
+              if (webViewRef.current) {
+                webViewRef.current.injectJavaScript(jsCode);
+                safeLog.info('Navigation JavaScript injected successfully');
+              }
+            } catch (injectionError) {
+              safeLog.error(
+                'Error injecting navigation JavaScript',
+                injectionError,
+              );
+            }
+          }, 1000); // Give WebView time to fully load
+        } else if (path) {
+          safeLog.warn('WebView not ready or path empty:', {
+            path,
+            webViewReady: !!webViewRef.current,
+          });
+        }
+      } catch (error) {
+        safeLog.error('Error in checkPendingNavigation', error);
+      }
+    };
+
+    // Check immediately and also with delay for safety
+    checkPendingNavigation();
+
+    // Also check after a delay in case the first check was too early
+    const delayedCheck = setTimeout(checkPendingNavigation, 2000);
+
+    return () => {
+      clearTimeout(delayedCheck);
+    };
+  }, [isInitialized]); // Only depend on initialization state
+
   // Don't render until URL is determined
   if (!isInitialized || !initialUrl) {
     return null;
@@ -358,7 +455,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       onShouldStartLoadWithRequest={handleNavigation}
       onError={handleError}
       onHttpError={handleError}
-      // Security & Performance Settings
       originWhitelist={['*']}
       style={{flex: 1}}
       sharedCookiesEnabled={true}

@@ -192,10 +192,32 @@ class BackgroundNotifModule(reactContext: ReactApplicationContext) : ReactContex
         }
     }
 
+    @ReactMethod
+    fun getPendingPath(promise: Promise) {
+        val path = MainActivity.pendingNavigationPath ?: ""
+        Log.d(TAG, "📱 getPendingPath called - path: '$path'")
+        promise.resolve(path)
+
+        // Only clear if path was actually used (not empty)
+        if (path.isNotEmpty()) {
+            Log.d(TAG, "🗑️ Clearing pending navigation path")
+            MainActivity.pendingNavigationPath = null
+        }
+    }
+
+    @ReactMethod
+    fun clearPendingPath(promise: Promise? = null) {
+        Log.d(TAG, "🗑️ Manually clearing pending navigation path")
+        MainActivity.pendingNavigationPath = null
+        promise?.resolve("Path cleared")
+    }
+
     // 🧹 Clean up when module is destroyed
     override fun onCatalystInstanceDestroy() {
         super.onCatalystInstanceDestroy()
         Log.d(TAG, "🧹 Module destroying - cleaning up coroutines")
         moduleScope.cancel()
     }
+
+
 }
