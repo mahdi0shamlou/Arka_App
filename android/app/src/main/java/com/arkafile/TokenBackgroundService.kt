@@ -541,9 +541,9 @@ class TokenBackgroundService : Service() {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setStyle(
                     NotificationCompat.BigTextStyle()
-                        .bigText("$body\n\n$details")
+                        .bigText("$body")
                         .setBigContentTitle(title)
-                        .setSummaryText("ArkaFile - $type")
+                        .setSummaryText("ArkaFile")
                 )
                 .setContentIntent(pendingIntent) // ← هم برای خود نوتیفیکیشن، هم اکشن
                 .addAction(android.R.drawable.ic_menu_view, "مشاهده", pendingIntent)
