@@ -2,6 +2,7 @@ import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Alert, Linking, NativeModules} from 'react-native';
 import WebView from 'react-native-webview';
 import {TokenService} from '../services/tokenService';
+import NativeLocalStorage from '../specs/NativeLocalStorage';
 
 const {BackgroundNotifModule} = NativeModules;
 
@@ -56,6 +57,12 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
   const [tokenCheckInProgress, setTokenCheckInProgress] =
     useState<boolean>(false);
+  const [value, setValue] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const storedValue = NativeLocalStorage.getItem('myKey');
+    setValue(storedValue ?? '');
+  }, []);
 
   // Refs for cleanup
   const isMountedRef = useRef<boolean>(true);
