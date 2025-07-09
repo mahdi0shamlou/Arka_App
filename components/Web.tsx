@@ -58,12 +58,7 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   const [tokenCheckInProgress, setTokenCheckInProgress] =
     useState<boolean>(false);
   const [value, setValue] = React.useState<string | null>(null);
-  const [lastProcessedPath, setLastProcessedPath] = React.useState<
-    string | null
-  >(null);
-  const [lastProcessedCustomerId, setLastProcessedCustomerId] = React.useState<
-    string | null
-  >(null);
+  // 📍 No state tracking needed - execute every path immediately
 
   // 🔄 Clean Path Monitoring Effect
   React.useEffect(() => {
@@ -92,19 +87,19 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
 
     // Helper functions
     const shouldNavigate = (path: string | null) => {
-      return (
-        path && path !== lastProcessedPath && path.trim() && webViewRef.current
-      );
+      // هر path موجود را اجرا کن، فارغ از تاریخچه
+      return path && path.trim() !== '' && webViewRef.current;
     };
 
     const shouldClickCustomerButton = (
       path: string | null,
       customerId: string | null,
     ) => {
+      // هر customer ID موجود را اجرا کن، فارغ از تاریخچه
       return (
         path === '/dashboard/customers' &&
         customerId &&
-        customerId !== lastProcessedCustomerId &&
+        customerId.trim() !== '' &&
         webViewRef.current
       );
     };
@@ -118,11 +113,8 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
         isCustomerPath && customerId ? `(customer: ${customerId})` : '',
       );
 
-      // Update state
-      setLastProcessedPath(path);
-      if (isCustomerPath && customerId) {
-        setLastProcessedCustomerId(customerId);
-      }
+      // No need to track processed paths anymore
+      console.log('🚀 Executing navigation without state tracking');
 
       // Inject navigation script
       const jsCode = createNavigationScript(path, isCustomerPath, customerId);
@@ -130,29 +122,32 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
 
       console.log('✅ Navigation script injected');
 
-      // 🧹 Clear data after successful action
+      // 🧹 Clear data immediately after action
       setTimeout(() => {
+        console.log('🧹 Clearing path from SharedPreferences');
         NativeLocalStorage.setItem('', 'path'); // Clear path
         if (!isCustomerPath) {
+          console.log('🧹 Clearing customerId from SharedPreferences');
           NativeLocalStorage.setItem('', 'customerId'); // Clear customer ID if not customer page
         }
-      }, 3000);
+      }, 200); // فوری پاک کردن
     };
 
     const handleCustomerButtonClick = (customerId: string) => {
       console.log('🔄 Customer button click for:', customerId);
 
-      setLastProcessedCustomerId(customerId);
+      console.log('🔘 Executing button click without state tracking');
 
       const jsCode = createButtonClickScript(customerId);
       webViewRef.current?.injectJavaScript(jsCode);
 
       console.log('✅ Button click script injected');
 
-      // 🧹 Clear customer ID after click
+      // 🧹 Clear customer ID immediately after click
       setTimeout(() => {
+        console.log('🧹 Clearing customerId after button click');
         NativeLocalStorage.setItem('', 'customerId');
-      }, 2000);
+      }, 200); // فوری پاک کردن
     };
 
     const createNavigationScript = (
@@ -182,35 +177,52 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
               return true;
             }
             
-            // Customer button click function
-            function clickButton(id) {
-              const selectors = [
-                'customer.' + id + '.button',
-                '.customer-' + id + ' button',
-                '#customer-' + id + ' button',
-                '[data-customer-id="' + id + '"] button',
-                '[class*="customer-' + id + '"] button',
-                'button[onclick*="' + id + '"]',
-                'button[data-id="' + id + '"]',
-                'tr[data-id="' + id + '"] button',
-                'div[data-customer="' + id + '"] button'
-              ];
-              
-              for (let i = 0; i < selectors.length; i++) {
-                try {
-                  const btn = document.querySelector(selectors[i]);
-                  if (btn && btn.offsetParent !== null) {
-                    console.log('✅ Button found:', selectors[i]);
-                    btn.click();
-                    console.log('✅ Button clicked');
-                    return true;
-                  }
-                } catch (e) {}
-              }
-              
-              console.warn('⚠️ No visible button found for:', id);
-              return false;
-            }
+                         // Customer button click function
+             function clickButton(id) {
+               console.log('🔍 Looking for button with ID: customer.' + id + '.button');
+               
+               // Primary method: getElementById (as used by user's site)
+               try {
+                 const primaryBtn = document.getElementById('customer.' + id + '.button');
+                 if (primaryBtn && primaryBtn.offsetParent !== null) {
+                   console.log('✅ Button found with getElementById');
+                   primaryBtn.click();
+                   console.log('✅ Button clicked successfully');
+                   return true;
+                 }
+               } catch (e) {
+                 console.warn('⚠️ getElementById failed:', e.message);
+               }
+               
+               // Fallback selectors
+               const selectors = [
+                 '#customer\\\\.' + id + '\\\\.button',
+                 '.customer-' + id + ' button',
+                 '#customer-' + id + ' button',
+                 '[data-customer-id="' + id + '"] button',
+                 '[class*="customer-' + id + '"] button',
+                 'button[onclick*="' + id + '"]',
+                 'button[data-id="' + id + '"]',
+                 'tr[data-id="' + id + '"] button',
+                 'div[data-customer="' + id + '"] button'
+               ];
+               
+               console.log('🔄 Trying fallback selectors...');
+               for (let i = 0; i < selectors.length; i++) {
+                 try {
+                   const btn = document.querySelector(selectors[i]);
+                   if (btn && btn.offsetParent !== null) {
+                     console.log('✅ Button found with fallback:', selectors[i]);
+                     btn.click();
+                     console.log('✅ Button clicked');
+                     return true;
+                   }
+                 } catch (e) {}
+               }
+               
+               console.warn('⚠️ No visible button found for customer:', id);
+               return false;
+             }
             
             // Main logic
             if (window.location.pathname === '${path}') {
@@ -257,10 +269,24 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     const createButtonClickScript = (customerId: string) => {
       return `
         (function() {
-          console.log('🔘 Button click script for:', '${customerId}');
+          console.log('🔘 Button click script for customer:', '${customerId}');
           
+          // Primary method: getElementById (as used by user's site)
+          try {
+            const primaryBtn = document.getElementById('customer.${customerId}.button');
+            if (primaryBtn && primaryBtn.offsetParent !== null) {
+              console.log('✅ Button found with getElementById');
+              primaryBtn.click();
+              console.log('✅ Button clicked successfully');
+              return true;
+            }
+          } catch (e) {
+            console.warn('⚠️ getElementById failed:', e.message);
+          }
+          
+          // Fallback selectors
           const selectors = [
-            'customer.${customerId}.button',
+            '#customer\\\\.${customerId}\\\\.button',
             '.customer-${customerId} button',
             '#customer-${customerId} button',
             '[data-customer-id="${customerId}"] button',
@@ -271,11 +297,12 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
             'div[data-customer="${customerId}"] button'
           ];
           
+          console.log('🔄 Trying fallback selectors...');
           for (let i = 0; i < selectors.length; i++) {
             try {
               const btn = document.querySelector(selectors[i]);
               if (btn && btn.offsetParent !== null) {
-                console.log('✅ Button found:', selectors[i]);
+                console.log('✅ Button found with fallback:', selectors[i]);
                 btn.click();
                 console.log('✅ Button clicked');
                 return true;
@@ -294,7 +321,7 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     const interval = setInterval(checkPathChanges, 500);
 
     return () => clearInterval(interval);
-  }, [lastProcessedPath, lastProcessedCustomerId, webViewRef]);
+  }, [webViewRef]);
 
   // Refs for cleanup
   const isMountedRef = useRef<boolean>(true);
