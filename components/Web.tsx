@@ -58,11 +58,243 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   const [tokenCheckInProgress, setTokenCheckInProgress] =
     useState<boolean>(false);
   const [value, setValue] = React.useState<string | null>(null);
+  const [lastProcessedPath, setLastProcessedPath] = React.useState<
+    string | null
+  >(null);
+  const [lastProcessedCustomerId, setLastProcessedCustomerId] = React.useState<
+    string | null
+  >(null);
 
+  // 🔄 Clean Path Monitoring Effect
   React.useEffect(() => {
-    const storedValue = NativeLocalStorage.getItem('myKey');
-    setValue(storedValue ?? '');
-  }, []);
+    const checkPathChanges = () => {
+      const storedPath = NativeLocalStorage.getItem('path');
+      const storedCustomerId = NativeLocalStorage.getItem('customerId');
+
+      console.log(
+        '🔗 Checking path:',
+        storedPath,
+        storedCustomerId ? `(customer: ${storedCustomerId})` : '',
+      );
+      setValue(storedPath ?? '');
+
+      if (!webViewRef.current) return;
+
+      // 1️⃣ Handle new path navigation
+      if (shouldNavigate(storedPath)) {
+        handlePathNavigation(storedPath!, storedCustomerId);
+      }
+      // 2️⃣ Handle customer ID change on same path
+      else if (shouldClickCustomerButton(storedPath, storedCustomerId)) {
+        handleCustomerButtonClick(storedCustomerId!);
+      }
+    };
+
+    // Helper functions
+    const shouldNavigate = (path: string | null) => {
+      return (
+        path && path !== lastProcessedPath && path.trim() && webViewRef.current
+      );
+    };
+
+    const shouldClickCustomerButton = (
+      path: string | null,
+      customerId: string | null,
+    ) => {
+      return (
+        path === '/dashboard/customers' &&
+        customerId &&
+        customerId !== lastProcessedCustomerId &&
+        webViewRef.current
+      );
+    };
+
+    const handlePathNavigation = (path: string, customerId: string | null) => {
+      const isCustomerPath = path === '/dashboard/customers';
+
+      console.log(
+        '🚀 Navigating to:',
+        path,
+        isCustomerPath && customerId ? `(customer: ${customerId})` : '',
+      );
+
+      // Update state
+      setLastProcessedPath(path);
+      if (isCustomerPath && customerId) {
+        setLastProcessedCustomerId(customerId);
+      }
+
+      // Inject navigation script
+      const jsCode = createNavigationScript(path, isCustomerPath, customerId);
+      webViewRef.current?.injectJavaScript(jsCode);
+
+      console.log('✅ Navigation script injected');
+
+      // 🧹 Clear data after successful action
+      setTimeout(() => {
+        NativeLocalStorage.setItem('', 'path'); // Clear path
+        if (!isCustomerPath) {
+          NativeLocalStorage.setItem('', 'customerId'); // Clear customer ID if not customer page
+        }
+      }, 3000);
+    };
+
+    const handleCustomerButtonClick = (customerId: string) => {
+      console.log('🔄 Customer button click for:', customerId);
+
+      setLastProcessedCustomerId(customerId);
+
+      const jsCode = createButtonClickScript(customerId);
+      webViewRef.current?.injectJavaScript(jsCode);
+
+      console.log('✅ Button click script injected');
+
+      // 🧹 Clear customer ID after click
+      setTimeout(() => {
+        NativeLocalStorage.setItem('', 'customerId');
+      }, 2000);
+    };
+
+    const createNavigationScript = (
+      path: string,
+      isCustomerPath: boolean,
+      customerId: string | null,
+    ) => {
+      return `
+        (function() {
+          try {
+            console.log('🚀 Navigation script for:', '${path}');
+            
+            // Navigation function
+            function navigate() {
+              if (window.next?.router) {
+                window.next.router.push('${path}');
+                console.log('✅ Next.js router navigation');
+                return true;
+              }
+              if (window.__NEXT_ROUTER__) {
+                window.__NEXT_ROUTER__.push('${path}');
+                console.log('✅ __NEXT_ROUTER__ navigation');
+                return true;
+              }
+              window.location.href = '${path}';
+              console.log('✅ Direct navigation');
+              return true;
+            }
+            
+            // Customer button click function
+            function clickButton(id) {
+              const selectors = [
+                'customer.' + id + '.button',
+                '.customer-' + id + ' button',
+                '#customer-' + id + ' button',
+                '[data-customer-id="' + id + '"] button',
+                '[class*="customer-' + id + '"] button',
+                'button[onclick*="' + id + '"]',
+                'button[data-id="' + id + '"]',
+                'tr[data-id="' + id + '"] button',
+                'div[data-customer="' + id + '"] button'
+              ];
+              
+              for (let i = 0; i < selectors.length; i++) {
+                try {
+                  const btn = document.querySelector(selectors[i]);
+                  if (btn && btn.offsetParent !== null) {
+                    console.log('✅ Button found:', selectors[i]);
+                    btn.click();
+                    console.log('✅ Button clicked');
+                    return true;
+                  }
+                } catch (e) {}
+              }
+              
+              console.warn('⚠️ No visible button found for:', id);
+              return false;
+            }
+            
+            // Main logic
+            if (window.location.pathname === '${path}') {
+              console.log('✅ Already on target path');
+              ${
+                isCustomerPath && customerId
+                  ? `
+              setTimeout(() => clickButton('${customerId}'), 1500);
+              `
+                  : ''
+              }
+            } else {
+              console.log('🔄 Navigating...');
+              navigate();
+              ${
+                isCustomerPath && customerId
+                  ? `
+              // Wait for navigation then click
+              let attempts = 0;
+              const checkInterval = setInterval(() => {
+                attempts++;
+                if (window.location.pathname === '${path}') {
+                  clearInterval(checkInterval);
+                  setTimeout(() => clickButton('${customerId}'), 1500);
+                } else if (attempts > 10) {
+                  clearInterval(checkInterval);
+                  console.warn('⚠️ Navigation timeout');
+                }
+              }, 500);
+              `
+                  : ''
+              }
+            }
+            
+          } catch (e) {
+            console.error('❌ Script error:', e);
+            window.location.href = '${path}';
+          }
+          return true;
+        })();
+      `;
+    };
+
+    const createButtonClickScript = (customerId: string) => {
+      return `
+        (function() {
+          console.log('🔘 Button click script for:', '${customerId}');
+          
+          const selectors = [
+            'customer.${customerId}.button',
+            '.customer-${customerId} button',
+            '#customer-${customerId} button',
+            '[data-customer-id="${customerId}"] button',
+            '[class*="customer-${customerId}"] button',
+            'button[onclick*="${customerId}"]',
+            'button[data-id="${customerId}"]',
+            'tr[data-id="${customerId}"] button',
+            'div[data-customer="${customerId}"] button'
+          ];
+          
+          for (let i = 0; i < selectors.length; i++) {
+            try {
+              const btn = document.querySelector(selectors[i]);
+              if (btn && btn.offsetParent !== null) {
+                console.log('✅ Button found:', selectors[i]);
+                btn.click();
+                console.log('✅ Button clicked');
+                return true;
+              }
+            } catch (e) {}
+          }
+          
+          console.warn('⚠️ No visible button found for customer:', '${customerId}');
+          return false;
+        })();
+      `;
+    };
+
+    // Start monitoring
+    checkPathChanges();
+    const interval = setInterval(checkPathChanges, 500);
+
+    return () => clearInterval(interval);
+  }, [lastProcessedPath, lastProcessedCustomerId, webViewRef]);
 
   // Refs for cleanup
   const isMountedRef = useRef<boolean>(true);
