@@ -57,275 +57,482 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
   const [tokenCheckInProgress, setTokenCheckInProgress] =
     useState<boolean>(false);
-  const [value, setValue] = React.useState<string | null>(null);
   // 📍 No state tracking needed - execute every path immediately
 
   // 🔄 Clean Path Monitoring Effect
   React.useEffect(() => {
-    const checkPathChanges = () => {
-      const storedPath = NativeLocalStorage.getItem('path');
-      const storedCustomerId = NativeLocalStorage.getItem('customerId');
+    if (isInitialized) {
+      const checkPathChanges = () => {
+        const storedPath = NativeLocalStorage.getItem('path');
+        const storedCustomerId = NativeLocalStorage.getItem('customerId');
 
-      console.log(
-        '🔗 Checking path:',
-        storedPath,
-        storedCustomerId ? `(customer: ${storedCustomerId})` : '',
-      );
-      setValue(storedPath ?? '');
+        console.log(
+          '🔗 Checking path:',
+          storedPath,
+          storedCustomerId ? `(customer: ${storedCustomerId})` : '',
+        );
 
-      if (!webViewRef.current) return;
+        if (!webViewRef.current) return;
 
-      // 1️⃣ Handle new path navigation
-      if (shouldNavigate(storedPath)) {
-        handlePathNavigation(storedPath!, storedCustomerId);
-      }
-      // 2️⃣ Handle customer ID change on same path
-      else if (shouldClickCustomerButton(storedPath, storedCustomerId)) {
-        handleCustomerButtonClick(storedCustomerId!);
-      }
-    };
-
-    // Helper functions
-    const shouldNavigate = (path: string | null) => {
-      // هر path موجود را اجرا کن، فارغ از تاریخچه
-      return path && path.trim() !== '' && webViewRef.current;
-    };
-
-    const shouldClickCustomerButton = (
-      path: string | null,
-      customerId: string | null,
-    ) => {
-      // هر customer ID موجود را اجرا کن، فارغ از تاریخچه
-      return (
-        path === '/dashboard/customers' &&
-        customerId &&
-        customerId.trim() !== '' &&
-        webViewRef.current
-      );
-    };
-
-    const handlePathNavigation = (path: string, customerId: string | null) => {
-      const isCustomerPath = path === '/dashboard/customers';
-
-      console.log(
-        '🚀 Navigating to:',
-        path,
-        isCustomerPath && customerId ? `(customer: ${customerId})` : '',
-      );
-
-      // No need to track processed paths anymore
-      console.log('🚀 Executing navigation without state tracking');
-
-      // Inject navigation script
-      const jsCode = createNavigationScript(path, isCustomerPath, customerId);
-      webViewRef.current?.injectJavaScript(jsCode);
-
-      console.log('✅ Navigation script injected');
-
-      // 🧹 Clear data immediately after action
-      setTimeout(() => {
-        console.log('🧹 Clearing path from SharedPreferences');
-        NativeLocalStorage.setItem('', 'path'); // Clear path
-        if (!isCustomerPath) {
-          console.log('🧹 Clearing customerId from SharedPreferences');
-          NativeLocalStorage.setItem('', 'customerId'); // Clear customer ID if not customer page
+        // 1️⃣ Handle new path navigation
+        if (shouldNavigate(storedPath)) {
+          handlePathNavigation(storedPath!, storedCustomerId);
         }
-      }, 200); // فوری پاک کردن
-    };
+        // 2️⃣ Handle customer ID change on same path
+        else if (shouldClickCustomerButton(storedPath, storedCustomerId)) {
+          handleCustomerButtonClick(storedCustomerId!);
+        }
+      };
 
-    const handleCustomerButtonClick = (customerId: string) => {
-      console.log('🔄 Customer button click for:', customerId);
+      // Helper functions
+      const shouldNavigate = (path: string | null) => {
+        // هر path موجود را اجرا کن، فارغ از تاریخچه
+        return path && path.trim() !== '' && webViewRef.current;
+      };
 
-      console.log('🔘 Executing button click without state tracking');
+      const shouldClickCustomerButton = (
+        path: string | null,
+        customerId: string | null,
+      ) => {
+        // هر customer ID موجود را اجرا کن، فارغ از تاریخچه
+        return (
+          path === '/dashboard/customers' &&
+          customerId &&
+          customerId.trim() !== '' &&
+          webViewRef.current
+        );
+      };
 
-      const jsCode = createButtonClickScript(customerId);
-      webViewRef.current?.injectJavaScript(jsCode);
+      const handlePathNavigation = (
+        path: string,
+        customerId: string | null,
+      ) => {
+        const isCustomerPath = path === '/dashboard/customers';
 
-      console.log('✅ Button click script injected');
+        console.log(
+          '🚀 Navigating to:',
+          path,
+          isCustomerPath && customerId ? `(customer: ${customerId})` : '',
+        );
 
-      // 🧹 Clear customer ID immediately after click
-      setTimeout(() => {
-        console.log('🧹 Clearing customerId after button click');
-        NativeLocalStorage.setItem('', 'customerId');
-      }, 200); // فوری پاک کردن
-    };
+        // No need to track processed paths anymore
+        console.log('🚀 Executing navigation without state tracking');
 
-    const createNavigationScript = (
-      path: string,
-      isCustomerPath: boolean,
-      customerId: string | null,
-    ) => {
-      return `
-        (function() {
-          try {
-            console.log('🚀 Navigation script for:', '${path}');
-            
-            // Navigation function
-            function navigate() {
-              if (window.next?.router) {
-                window.next.router.push('${path}');
-                console.log('✅ Next.js router navigation');
+        // Inject navigation script
+        const jsCode = createNavigationScript(path, isCustomerPath, customerId);
+        webViewRef.current?.injectJavaScript(jsCode);
+
+        console.log('✅ Navigation script injected');
+
+        // 🧹 Clear data after action (longer delay for files and customers)
+        const needsSlowRegularClear =
+          path.includes('/dashboard/files-mobile/') || isCustomerPath;
+        const clearDelay = needsSlowRegularClear ? 3000 : 200; // Slow navigation needs more time
+
+        setTimeout(() => {
+          console.log('🧹 Clearing path from SharedPreferences');
+          NativeLocalStorage.setItem('', 'path'); // Clear path
+          if (!isCustomerPath) {
+            console.log('🧹 Clearing customerId from SharedPreferences');
+            NativeLocalStorage.setItem('', 'customerId'); // Clear customer ID if not customer page
+          }
+        }, clearDelay);
+      };
+
+      const handleCustomerButtonClick = (customerId: string) => {
+        console.log('🔄 Customer button click for:', customerId);
+
+        console.log('🔘 Executing button click without state tracking');
+
+        const jsCode = createButtonClickScript(customerId);
+        webViewRef.current?.injectJavaScript(jsCode);
+
+        console.log('✅ Button click script injected');
+
+        // 🧹 Clear customer ID after click (slower for stability)
+        setTimeout(() => {
+          console.log('🧹 Clearing customerId after button click');
+          NativeLocalStorage.setItem('', 'customerId');
+        }, 2000); // کندتر برای پایداری
+      };
+
+      const createNavigationScript = (
+        path: string,
+        isCustomerPath: boolean,
+        customerId: string | null,
+      ) => {
+        const isFilePath = path.includes('/dashboard/files-mobile/');
+        const needsSlowRegularNav = isFilePath || isCustomerPath;
+        return `
+          (function() {
+            try {
+              console.log('🚀 Navigation script for:', '${path}');
+              ${needsSlowRegularNav ? 'console.log("📁 Slow navigation - adding delay");' : ''}
+              
+              // Navigation function
+              function navigate() {
+                if (window.next?.router) {
+                  window.next.router.push('${path}');
+                  console.log('✅ Next.js router navigation');
+                  return true;
+                }
+                if (window.__NEXT_ROUTER__) {
+                  window.__NEXT_ROUTER__.push('${path}');
+                  console.log('✅ __NEXT_ROUTER__ navigation');
+                  return true;
+                }
+                window.location.href = '${path}';
+                console.log('✅ Direct navigation');
                 return true;
               }
-              if (window.__NEXT_ROUTER__) {
-                window.__NEXT_ROUTER__.push('${path}');
-                console.log('✅ __NEXT_ROUTER__ navigation');
-                return true;
-              }
-              window.location.href = '${path}';
-              console.log('✅ Direct navigation');
-              return true;
-            }
-            
-                         // Customer button click function
-             function clickButton(id) {
-               console.log('🔍 Looking for button with ID: customer.' + id + '.button');
-               
-               // Primary method: getElementById (as used by user's site)
-               try {
-                 const primaryBtn = document.getElementById('customer.' + id + '.button');
-                 if (primaryBtn && primaryBtn.offsetParent !== null) {
-                   console.log('✅ Button found with getElementById');
-                   primaryBtn.click();
-                   console.log('✅ Button clicked successfully');
-                   return true;
-                 }
-               } catch (e) {
-                 console.warn('⚠️ getElementById failed:', e.message);
-               }
-               
-               // Fallback selectors
-               const selectors = [
-                 '#customer\\\\.' + id + '\\\\.button',
-                 '.customer-' + id + ' button',
-                 '#customer-' + id + ' button',
-                 '[data-customer-id="' + id + '"] button',
-                 '[class*="customer-' + id + '"] button',
-                 'button[onclick*="' + id + '"]',
-                 'button[data-id="' + id + '"]',
-                 'tr[data-id="' + id + '"] button',
-                 'div[data-customer="' + id + '"] button'
-               ];
-               
-               console.log('🔄 Trying fallback selectors...');
-               for (let i = 0; i < selectors.length; i++) {
+              
+                           // Customer button click function
+               function clickButton(id) {
+                 console.log('🔍 Looking for button with ID: customer.' + id + '.button');
+                 
+                 // Primary method: getElementById (as used by user's site)
                  try {
-                   const btn = document.querySelector(selectors[i]);
-                   if (btn && btn.offsetParent !== null) {
-                     console.log('✅ Button found with fallback:', selectors[i]);
-                     btn.click();
-                     console.log('✅ Button clicked');
+                   const primaryBtn = document.getElementById('customer.' + id + '.button');
+                   if (primaryBtn && primaryBtn.offsetParent !== null) {
+                     console.log('✅ Button found with getElementById');
+                     primaryBtn.click();
+                     console.log('✅ Button clicked successfully');
                      return true;
                    }
-                 } catch (e) {}
+                 } catch (e) {
+                   console.warn('⚠️ getElementById failed:', e.message);
+                 }
+                 
+                 // Fallback selectors
+                 const selectors = [
+                   '#customer\\\\.' + id + '\\\\.button',
+                   '.customer-' + id + ' button',
+                   '#customer-' + id + ' button',
+                   '[data-customer-id="' + id + '"] button',
+                   '[class*="customer-' + id + '"] button',
+                   'button[onclick*="' + id + '"]',
+                   'button[data-id="' + id + '"]',
+                   'tr[data-id="' + id + '"] button',
+                   'div[data-customer="' + id + '"] button'
+                 ];
+                 
+                 console.log('🔄 Trying fallback selectors...');
+                 for (let i = 0; i < selectors.length; i++) {
+                   try {
+                     const btn = document.querySelector(selectors[i]);
+                     if (btn && btn.offsetParent !== null) {
+                       console.log('✅ Button found with fallback:', selectors[i]);
+                       btn.click();
+                       console.log('✅ Button clicked');
+                       return true;
+                     }
+                   } catch (e) {}
+                 }
+                 
+                 console.warn('⚠️ No visible button found for customer:', id);
+                 return false;
                }
-               
-               console.warn('⚠️ No visible button found for customer:', id);
-               return false;
-             }
-            
-            // Main logic
-            if (window.location.pathname === '${path}') {
-              console.log('✅ Already on target path');
-              ${
-                isCustomerPath && customerId
-                  ? `
-              setTimeout(() => clickButton('${customerId}'), 1500);
-              `
-                  : ''
-              }
-            } else {
-              console.log('🔄 Navigating...');
-              navigate();
-              ${
-                isCustomerPath && customerId
-                  ? `
-              // Wait for navigation then click
-              let attempts = 0;
-              const checkInterval = setInterval(() => {
-                attempts++;
+              
+              // Main logic with delay for files and customers
+              const navigationDelay = ${needsSlowRegularNav ? '1500' : '0'};
+              
+              setTimeout(() => {
                 if (window.location.pathname === '${path}') {
-                  clearInterval(checkInterval);
-                  setTimeout(() => clickButton('${customerId}'), 1500);
-                } else if (attempts > 10) {
-                  clearInterval(checkInterval);
-                  console.warn('⚠️ Navigation timeout');
+                  console.log('✅ Already on target path');
+                  ${
+                    isCustomerPath && customerId
+                      ? `
+                  setTimeout(() => clickButton('${customerId}'), 2500);
+                  `
+                      : ''
+                  }
+                } else {
+                  console.log('🔄 Navigating...');
+                  navigate();
+                  ${
+                    isCustomerPath && customerId
+                      ? `
+                  // Wait for navigation then click
+                  let attempts = 0;
+                  const checkInterval = setInterval(() => {
+                    attempts++;
+                    if (window.location.pathname === '${path}') {
+                      clearInterval(checkInterval);
+                      setTimeout(() => clickButton('${customerId}'), 2500);
+                    } else if (attempts > 15) {
+                      clearInterval(checkInterval);
+                      console.warn('⚠️ Navigation timeout');
+                    }
+                  }, 500);
+                  `
+                      : ''
+                  }
                 }
-              }, 500);
-              `
-                  : ''
-              }
+              }, navigationDelay);
+              
+            } catch (e) {
+              console.error('❌ Script error:', e);
+              setTimeout(() => {
+                window.location.href = '${path}';
+              }, ${needsSlowRegularNav ? '2000' : '500'});
             }
-            
-          } catch (e) {
-            console.error('❌ Script error:', e);
-            window.location.href = '${path}';
-          }
-          return true;
-        })();
-      `;
-    };
+            return true;
+          })();
+        `;
+      };
 
-    const createButtonClickScript = (customerId: string) => {
-      return `
-        (function() {
-          console.log('🔘 Button click script for customer:', '${customerId}');
-          
-          // Primary method: getElementById (as used by user's site)
-          try {
-            const primaryBtn = document.getElementById('customer.${customerId}.button');
-            if (primaryBtn && primaryBtn.offsetParent !== null) {
-              console.log('✅ Button found with getElementById');
-              primaryBtn.click();
-              console.log('✅ Button clicked successfully');
-              return true;
-            }
-          } catch (e) {
-            console.warn('⚠️ getElementById failed:', e.message);
-          }
-          
-          // Fallback selectors
-          const selectors = [
-            '#customer\\\\.${customerId}\\\\.button',
-            '.customer-${customerId} button',
-            '#customer-${customerId} button',
-            '[data-customer-id="${customerId}"] button',
-            '[class*="customer-${customerId}"] button',
-            'button[onclick*="${customerId}"]',
-            'button[data-id="${customerId}"]',
-            'tr[data-id="${customerId}"] button',
-            'div[data-customer="${customerId}"] button'
-          ];
-          
-          console.log('🔄 Trying fallback selectors...');
-          for (let i = 0; i < selectors.length; i++) {
+      const createButtonClickScript = (customerId: string) => {
+        return `
+          (function() {
+            console.log('🔘 Button click script for customer:', '${customerId}');
+            
+            // Primary method: getElementById (as used by user's site)
             try {
-              const btn = document.querySelector(selectors[i]);
-              if (btn && btn.offsetParent !== null) {
-                console.log('✅ Button found with fallback:', selectors[i]);
-                btn.click();
-                console.log('✅ Button clicked');
+              const primaryBtn = document.getElementById('customer.${customerId}.button');
+              if (primaryBtn && primaryBtn.offsetParent !== null) {
+                console.log('✅ Button found with getElementById');
+                primaryBtn.click();
+                console.log('✅ Button clicked successfully');
                 return true;
               }
-            } catch (e) {}
-          }
-          
-          console.warn('⚠️ No visible button found for customer:', '${customerId}');
-          return false;
-        })();
-      `;
-    };
+            } catch (e) {
+              console.warn('⚠️ getElementById failed:', e.message);
+            }
+            
+            // Fallback selectors
+            const selectors = [
+              '#customer\\\\.${customerId}\\\\.button',
+              '.customer-${customerId} button',
+              '#customer-${customerId} button',
+              '[data-customer-id="${customerId}"] button',
+              '[class*="customer-${customerId}"] button',
+              'button[onclick*="${customerId}"]',
+              'button[data-id="${customerId}"]',
+              'tr[data-id="${customerId}"] button',
+              'div[data-customer="${customerId}"] button'
+            ];
+            
+            console.log('🔄 Trying fallback selectors...');
+            for (let i = 0; i < selectors.length; i++) {
+              try {
+                const btn = document.querySelector(selectors[i]);
+                if (btn && btn.offsetParent !== null) {
+                  console.log('✅ Button found with fallback:', selectors[i]);
+                  btn.click();
+                  console.log('✅ Button clicked');
+                  return true;
+                }
+              } catch (e) {}
+            }
+            
+            console.warn('⚠️ No visible button found for customer:', '${customerId}');
+            return false;
+          })();
+        `;
+      };
 
-    // Start monitoring
-    checkPathChanges();
-    const interval = setInterval(checkPathChanges, 500);
-
-    return () => clearInterval(interval);
-  }, [webViewRef]);
+      // Start monitoring
+      checkPathChanges();
+      const interval = setInterval(checkPathChanges, 500);
+      return () => clearInterval(interval);
+    }
+  }, [webViewRef, isInitialized]);
 
   // Refs for cleanup
   const isMountedRef = useRef<boolean>(true);
   const initTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 🔍 Check for pending navigation immediately (for app cold start)
+  const checkPendingNavigation = async () => {
+    try {
+      console.log('🔍 Checking for pending navigation...');
+
+      const storedPath = NativeLocalStorage.getItem('path');
+      const storedCustomerId = NativeLocalStorage.getItem('customerId');
+
+      if (!storedPath) {
+        console.log('✅ No pending navigation found');
+        return;
+      }
+
+      console.log(
+        '🎯 Found pending navigation:',
+        storedPath,
+        storedCustomerId ? `(customer: ${storedCustomerId})` : '',
+      );
+
+      // Wait for WebView to be ready
+      let attempts = 0;
+      const waitForWebView = () => {
+        attempts++;
+        if (webViewRef.current && attempts < 50) {
+          console.log('🚀 WebView ready, executing pending navigation');
+
+          // Execute the same logic as path monitoring
+          if (storedPath && storedPath.trim() !== '') {
+            // Any path navigation (includes customer path with button click)
+            handlePendingPathNavigation(storedPath, storedCustomerId);
+          } else if (storedCustomerId && storedCustomerId.trim() !== '') {
+            // Only button click without navigation (rare case)
+            handlePendingCustomerClick(storedCustomerId);
+          }
+        } else if (attempts < 50) {
+          setTimeout(waitForWebView, 100);
+        } else {
+          console.warn(
+            '⚠️ WebView not ready after 5 seconds, skipping pending navigation',
+          );
+        }
+      };
+
+      // Give more time for file and customer navigation which needs longer to load
+      const delayTime =
+        storedPath?.includes('/dashboard/files-mobile/') ||
+        storedPath === '/dashboard/customers'
+          ? 2000
+          : 500;
+      setTimeout(waitForWebView, delayTime);
+    } catch (error) {
+      console.error('❌ Error in checkPendingNavigation:', error);
+    }
+  };
+
+  // Helper functions for pending navigation
+  const handlePendingPathNavigation = (
+    path: string,
+    customerId: string | null,
+  ) => {
+    const isCustomerPath = path === '/dashboard/customers';
+    console.log('🚀 Executing pending navigation to:', path);
+
+    // Simple navigation script for pending execution
+    const isFilePath = path.includes('/dashboard/files-mobile/');
+    const isCustomerNav = path === '/dashboard/customers';
+    const needsSlowNavigation = isFilePath || isCustomerNav;
+
+    const jsCode = `
+      (function() {
+        try {
+          console.log('🚀 Pending navigation to: ${path}');
+          
+          function navigate() {
+            ${needsSlowNavigation ? 'console.log("📁 Slow navigation - using slower method");' : ''}
+            
+            if (window.next?.router) {
+              window.next.router.push('${path}');
+              console.log('✅ Next.js router navigation');
+              return true;
+            }
+            if (window.__NEXT_ROUTER__) {
+              window.__NEXT_ROUTER__.push('${path}');
+              console.log('✅ __NEXT_ROUTER__ navigation');
+              return true;
+            }
+            console.log('✅ Direct navigation');
+            window.location.href = '${path}';
+            return true;
+          }
+          
+          function clickButton(id) {
+            try {
+              const btn = document.getElementById('customer.' + id + '.button');
+              if (btn && btn.offsetParent !== null) {
+                btn.click();
+                console.log('✅ Pending button clicked');
+                return true;
+              }
+            } catch (e) {}
+            return false;
+          }
+          
+          // For files and customers, add extra delay before navigation
+          const navigationDelay = ${needsSlowNavigation ? '1500' : '0'};
+          
+          setTimeout(() => {
+            if (window.location.pathname === '${path}') {
+              console.log('✅ Already on target path');
+              ${isCustomerPath && customerId ? `setTimeout(() => clickButton('${customerId}'), 2500);` : ''}
+            } else {
+              navigate();
+              ${
+                isCustomerPath && customerId
+                  ? `
+              setTimeout(() => {
+                let attempts = 0;
+                const checkInterval = setInterval(() => {
+                  attempts++;
+                  if (window.location.pathname === '${path}') {
+                    clearInterval(checkInterval);
+                    setTimeout(() => clickButton('${customerId}'), 2500);
+                                      } else if (attempts > 15) {
+                    clearInterval(checkInterval);
+                  }
+                }, 500);
+              }, 1000);`
+                  : ''
+              }
+            }
+          }, navigationDelay);
+          
+        } catch (e) {
+          console.error('❌ Pending navigation error:', e);
+          setTimeout(() => {
+            window.location.href = '${path}';
+          }, ${needsSlowNavigation ? '2000' : '500'});
+        }
+        return true;
+      })();
+    `;
+
+    webViewRef.current?.injectJavaScript(jsCode);
+
+    // Clear data after execution (longer delay for files and customers)
+    const needsSlowClear =
+      path.includes('/dashboard/files-mobile/') ||
+      path === '/dashboard/customers';
+    const clearDelay = needsSlowClear ? 4000 : 1000; // Slow navigation needs more time
+
+    setTimeout(() => {
+      console.log('🧹 Clearing pending navigation data');
+      NativeLocalStorage.setItem('', 'path');
+      if (!isCustomerPath) {
+        NativeLocalStorage.setItem('', 'customerId');
+      }
+    }, clearDelay);
+  };
+
+  const handlePendingCustomerClick = (customerId: string) => {
+    console.log('🔘 Executing pending customer button click for:', customerId);
+
+    // Simple button click script for pending execution
+    const jsCode = `
+      (function() {
+        console.log('🔘 Pending button click for: ${customerId}');
+        
+        try {
+          const btn = document.getElementById('customer.${customerId}.button');
+          if (btn && btn.offsetParent !== null) {
+            btn.click();
+            console.log('✅ Pending button clicked successfully');
+            return true;
+          }
+        } catch (e) {
+          console.warn('⚠️ Pending button click failed:', e.message);
+        }
+        
+        console.warn('⚠️ Pending button not found for customer: ${customerId}');
+        return false;
+      })();
+    `;
+
+    webViewRef.current?.injectJavaScript(jsCode);
+
+    // Clear data after execution (slower for stability)
+    setTimeout(() => {
+      console.log('🧹 Clearing pending customer data');
+      NativeLocalStorage.setItem('', 'customerId');
+    }, 3000); // کندتر برای پایداری
+  };
 
   // 🚀 Initialize app and determine starting URL
   useEffect(() => {
@@ -345,15 +552,21 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
         }
 
         // Add small delay to ensure URL is set before rendering
-        initTimeoutRef.current = setTimeout(() => {
+        initTimeoutRef.current = setTimeout(async () => {
           if (isMountedRef.current) {
             setIsInitialized(true);
+
+            // 🎯 Immediately check for pending navigation after initialization
+            await checkPendingNavigation();
           }
         }, 100);
       } catch (error) {
         safeLog.error('Error initializing app', error);
         setInitialUrl('https://www.arkafile.org/login'); // Fallback to login
         setIsInitialized(true);
+
+        // Still check for pending navigation even on error
+        setTimeout(checkPendingNavigation, 500);
       }
     };
 
@@ -608,103 +821,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     },
     [setCanGoBack],
   );
-
-  // 📱 Handle notification navigation with proper timing
-  useEffect(() => {
-    if (!isInitialized) return;
-
-    const checkPendingNavigation = async () => {
-      try {
-        safeLog.info('Checking for pending navigation...');
-
-        if (!BackgroundNotifModule?.getPendingPath) {
-          safeLog.warn('getPendingPath method not available');
-          return;
-        }
-
-        const path = await BackgroundNotifModule.getPendingPath();
-        safeLog.info('Pending path received:', path);
-
-        if (path && path.trim() && webViewRef.current) {
-          // Wait a bit to ensure WebView is fully loaded
-          setTimeout(() => {
-            try {
-              const jsCode = `
-                (function() {
-                  try {
-                    console.log('🚀 Next.js Navigation to: ${path}');
-                    
-                    // Check if we're already on the target path
-                    if (window.location.pathname === "${path}") {
-                      console.log('✅ Already on target path');
-                      return true;
-                    }
-                    
-                    // Next.js navigation - try multiple methods
-                    
-                    // Method 1: Use Next.js router if available
-                    if (window.next && window.next.router) {
-                      window.next.router.push("${path}");
-                      console.log('✅ Navigation via Next.js router');
-                      return true;
-                    }
-                    
-                    // Method 2: Try global router variable (some Next.js setups)
-                    if (window.__NEXT_ROUTER__) {
-                      window.__NEXT_ROUTER__.push("${path}");
-                      console.log('✅ Navigation via __NEXT_ROUTER__');
-                      return true;
-                    }
-                    
-                    // Method 3: Direct navigation - works best with Next.js
-                    window.location.href = "${path}";
-                    console.log('✅ Navigation via location.href');
-                    
-                  } catch (e) {
-                    console.error('❌ Navigation error:', e);
-                    // Fallback
-                    try {
-                      window.location.href = "${path}";
-                    } catch (fallbackError) {
-                      console.error('❌ Fallback navigation failed:', fallbackError);
-                    }
-                  }
-                  return true;
-                })();
-              `;
-
-              if (webViewRef.current) {
-                webViewRef.current.injectJavaScript(jsCode);
-                safeLog.info('Navigation JavaScript injected successfully');
-              }
-            } catch (injectionError) {
-              safeLog.error(
-                'Error injecting navigation JavaScript',
-                injectionError,
-              );
-            }
-          }, 1000); // Give WebView time to fully load
-        } else if (path) {
-          safeLog.warn('WebView not ready or path empty:', {
-            path,
-            webViewReady: !!webViewRef.current,
-          });
-        }
-      } catch (error) {
-        safeLog.error('Error in checkPendingNavigation', error);
-      }
-    };
-
-    // Check immediately and also with delay for safety
-    checkPendingNavigation();
-
-    // Also check after a delay in case the first check was too early
-    const delayedCheck = setTimeout(checkPendingNavigation, 2000);
-
-    return () => {
-      clearTimeout(delayedCheck);
-    };
-  }, [isInitialized]); // Only depend on initialization state
 
   // Don't render until URL is determined
   if (!isInitialized || !initialUrl) {
