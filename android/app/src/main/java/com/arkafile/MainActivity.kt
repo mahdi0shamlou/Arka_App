@@ -68,6 +68,7 @@ class MainActivity : ReactActivity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
+        Log.d(TAG, "🔄 onNewIntent called - processing new notification")
         handleNotificationIntent()
     }
 
@@ -93,6 +94,7 @@ class MainActivity : ReactActivity() {
                 Log.d("NotifAction", "🔹 id: $id")
                 Log.d("NotifAction", "🔹 type: $type")
                 Log.d("NotifAction", "🔹 details: $details")
+                Log.d("NotifAction", "🎯 Processing notification with unique ID: ${id?.hashCode()?.absoluteValue}")
 
                 // Handle different notification types
                 when {
@@ -143,6 +145,10 @@ class MainActivity : ReactActivity() {
                         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 val intId = id.hashCode().absoluteValue
                 notificationManager.cancel(intId)
+                Log.d("NotifAction", "🗑️ Notification cancelled with ID: $intId")
+                
+                // Clear the intent to prevent reprocessing
+                intent?.removeExtra("from_notification")
             }
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error handling notification intent: ${e.message}")

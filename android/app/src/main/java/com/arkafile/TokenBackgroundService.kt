@@ -527,7 +527,7 @@ class TokenBackgroundService : Service() {
     
             val pendingIntent = PendingIntent.getActivity(
                 this,
-                0,
+                id.hashCode().absoluteValue, // ← استفاده از ID منحصر به فرد
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
@@ -553,9 +553,10 @@ class TokenBackgroundService : Service() {
                 .setAutoCancel(true)
                 .build()
     
-            notificationManager.notify(id.hashCode().absoluteValue, notification)
-    
+                        notificationManager.notify(id.hashCode().absoluteValue, notification)
+
             Log.i(TAG, "✅ Notification displayed: $title ($type)")
+            Log.d(TAG, "🔍 Notification created with unique requestCode: ${id.hashCode().absoluteValue}")
     
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to show notification: ${e.message}")
