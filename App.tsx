@@ -53,7 +53,6 @@ export default function HomeScreen() {
             );
           }
         } catch (error) {
-          console.log('Battery optimization permission error:', error);
         }
       }
     };

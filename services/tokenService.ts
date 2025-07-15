@@ -41,7 +41,6 @@ export class TokenService {
 
       return tokenData.token ? tokenData : null;
     } catch (error) {
-      console.error('Error retrieving token from cookies:', error);
       return null;
     }
   }
@@ -69,7 +68,6 @@ export class TokenService {
 
       return true;
     } catch (error) {
-      console.error('Error saving token:', error);
       return false;
     }
   }
@@ -87,7 +85,6 @@ export class TokenService {
       const tokens = JSON.parse(tokenData);
       return tokens;
     } catch (error) {
-      console.error('Error retrieving stored token:', error);
       return null;
     }
   }
@@ -110,7 +107,6 @@ export class TokenService {
 
       return true;
     } catch (error) {
-      console.error('Error clearing token:', error);
       return false;
     }
   }
@@ -121,10 +117,8 @@ export class TokenService {
   static async clearCookies(): Promise<boolean> {
     try {
       await CookieManager.clearAll();
-      console.log('Cookies cleared successfully');
       return true;
     } catch (error) {
-      console.error('Error clearing cookies:', error);
       return false;
     }
   }
@@ -149,7 +143,6 @@ export class TokenService {
 
       return null;
     } catch (error) {
-      console.error('Error getting valid token:', error);
       return null;
     }
   }
@@ -162,7 +155,6 @@ export class TokenService {
       const tokens = await this.getStoredTokens();
       return !!(tokens && tokens.token);
     } catch (error) {
-      console.error('Error checking token validity:', error);
       return false;
     }
   }
@@ -181,7 +173,6 @@ export class TokenService {
 
       return null;
     } catch (error) {
-      console.error('Error syncing token from cookies:', error);
       return null;
     }
   }
@@ -213,7 +204,6 @@ export class TokenService {
 
       return allCookies;
     } catch (error) {
-      console.error('Error getting all cookies:', error);
       return {};
     }
   }
@@ -249,7 +239,6 @@ export class TokenService {
 
       return null;
     } catch (error) {
-      console.error('Error syncing token:', error);
       return null;
     }
   }

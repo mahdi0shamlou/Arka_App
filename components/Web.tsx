@@ -1,5 +1,6 @@
+import SmsListener from '@ernestbies/react-native-android-sms-listener';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {Alert, Linking, NativeModules} from 'react-native';
+import {Alert, Linking, NativeModules, PermissionsAndroid} from 'react-native';
 import WebView from 'react-native-webview';
 import {TokenService} from '../services/tokenService';
 import NativeLocalStorage from '../specs/NativeLocalStorage';
@@ -13,45 +14,87 @@ interface IProps {
   webViewRef: React.RefObject<WebView<{}> | null>;
 }
 
-// 🛡️ Safe logging to prevent crashes
-const safeLog = {
-  info: (message: string, ...args: any[]) => {
+// 📱 Simple SMS Helper Functions using react-native-android-sms-listener
+const smsHelpers = {
+  // درخواست SMS permission
+  requestSMSPermission: async () => {
     try {
-      if (__DEV__) {
-        console.log(`ℹ️ ${message}`, ...args);
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.READ_SMS,
+        {
+          title: 'SMS Permission',
+          message: 'این اپ برای خواندن پیامک‌ها نیاز به دسترسی دارد',
+          buttonNeutral: 'بعداً بپرس',
+          buttonNegative: 'انصراف',
+          buttonPositive: 'OK',
+        },
+      );
+
+      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+        return true;
+      } else {
+        return false;
       }
-    } catch (e) {
-      // Silent fail
+    } catch (error) {
+      return false;
     }
   },
-  error: (message: string, error?: any) => {
+
+  // شروع SMS monitoring
+  startSMSMonitoring: async (onOtpFound: (otp: string) => void) => {
     try {
-      if (__DEV__) {
-        console.warn(`❌ ${message}`, error?.message || error || '');
+      // درخواست permission
+      const receivePermission = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,
+      );
+
+      const readPermission = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.READ_SMS,
+      );
+
+      if (
+        receivePermission === PermissionsAndroid.RESULTS.GRANTED &&
+        readPermission === PermissionsAndroid.RESULTS.GRANTED
+      ) {
+        // استفاده از کتابخانه موجود
+
+        const subscription = SmsListener.addListener(message => {
+          if (message && message.body) {
+            const messageBody = message.body;
+
+            // Extract OTP (4-6 digits)
+            const otpMatch = messageBody.match(/\b\d{4,6}\b/);
+            if (otpMatch) {
+              const otp = otpMatch[0];
+              onOtpFound(otp);
+            }
+          }
+        });
+
+        return subscription;
+      } else {
+        return null;
       }
-    } catch (e) {
-      // Silent fail
+    } catch (error) {
+      return null;
     }
   },
-  warn: (message: string, ...args: any[]) => {
+
+  // تنظیم کامل SMS
+  setupSMS: async (onOtpFound: (otp: string) => void) => {
     try {
-      if (__DEV__) {
-        console.warn(`⚠️ ${message}`, ...args);
+      const subscription = await smsHelpers.startSMSMonitoring(onOtpFound);
+      if (subscription) {
+        return true;
+      } else {
+        return false;
       }
-    } catch (e) {
-      // Silent fail
+    } catch (error) {
+      return false;
     }
   },
 };
 
-/**
- * 🔧 Crash-Free Web Component
- * - Eliminated console crash issues ✅
- * - Safe error handling ✅
- * - Improved stability ✅
- * - Memory leak prevention ✅
- * - Following MUI component rules ✅
- */
 function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   const [initialUrl, setInitialUrl] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
@@ -65,12 +108,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       const checkPathChanges = () => {
         const storedPath = NativeLocalStorage.getItem('path');
         const storedCustomerId = NativeLocalStorage.getItem('customerId');
-
-        console.log(
-          '🔗 Checking path:',
-          storedPath,
-          storedCustomerId ? `(customer: ${storedCustomerId})` : '',
-        );
 
         if (!webViewRef.current) return;
 
@@ -109,20 +146,9 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       ) => {
         const isCustomerPath = path === '/dashboard/customers';
 
-        console.log(
-          '🚀 Navigating to:',
-          path,
-          isCustomerPath && customerId ? `(customer: ${customerId})` : '',
-        );
-
-        // No need to track processed paths anymore
-        console.log('🚀 Executing navigation without state tracking');
-
         // Inject navigation script
         const jsCode = createNavigationScript(path, isCustomerPath, customerId);
         webViewRef.current?.injectJavaScript(jsCode);
-
-        console.log('✅ Navigation script injected');
 
         // 🧹 Clear data after action (longer delay for files and customers)
         const needsSlowRegularClear =
@@ -130,28 +156,19 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
         const clearDelay = needsSlowRegularClear ? 3000 : 200; // Slow navigation needs more time
 
         setTimeout(() => {
-          console.log('🧹 Clearing path from SharedPreferences');
           NativeLocalStorage.setItem('', 'path'); // Clear path
           if (!isCustomerPath) {
-            console.log('🧹 Clearing customerId from SharedPreferences');
             NativeLocalStorage.setItem('', 'customerId'); // Clear customer ID if not customer page
           }
         }, clearDelay);
       };
 
       const handleCustomerButtonClick = (customerId: string) => {
-        console.log('🔄 Customer button click for:', customerId);
-
-        console.log('🔘 Executing button click without state tracking');
-
         const jsCode = createButtonClickScript(customerId);
         webViewRef.current?.injectJavaScript(jsCode);
 
-        console.log('✅ Button click script injected');
-
         // 🧹 Clear customer ID after click (slower for stability)
         setTimeout(() => {
-          console.log('🧹 Clearing customerId after button click');
           NativeLocalStorage.setItem('', 'customerId');
         }, 2000); // کندتر برای پایداری
       };
@@ -166,42 +183,31 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
         return `
           (function() {
             try {
-              console.log('🚀 Navigation script for:', '${path}');
-              ${needsSlowRegularNav ? 'console.log("📁 Slow navigation - adding delay");' : ''}
               
               // Navigation function
               function navigate() {
                 if (window.next?.router) {
                   window.next.router.push('${path}');
-                  console.log('✅ Next.js router navigation');
                   return true;
                 }
                 if (window.__NEXT_ROUTER__) {
                   window.__NEXT_ROUTER__.push('${path}');
-                  console.log('✅ __NEXT_ROUTER__ navigation');
                   return true;
                 }
                 window.location.href = '${path}';
-                console.log('✅ Direct navigation');
                 return true;
               }
               
                            // Customer button click function
                function clickButton(id) {
-                 console.log('🔍 Looking for button with ID: customer.' + id + '.button');
-                 
                  // Primary method: getElementById (as used by user's site)
                  try {
                    const primaryBtn = document.getElementById('customer.' + id + '.button');
                    if (primaryBtn && primaryBtn.offsetParent !== null) {
-                     console.log('✅ Button found with getElementById');
                      primaryBtn.click();
-                     console.log('✅ Button clicked successfully');
                      return true;
                    }
-                 } catch (e) {
-                   console.warn('⚠️ getElementById failed:', e.message);
-                 }
+                 } catch (e) {}
                  
                  // Fallback selectors
                  const selectors = [
@@ -216,20 +222,16 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
                    'div[data-customer="' + id + '"] button'
                  ];
                  
-                 console.log('🔄 Trying fallback selectors...');
                  for (let i = 0; i < selectors.length; i++) {
                    try {
                      const btn = document.querySelector(selectors[i]);
                      if (btn && btn.offsetParent !== null) {
-                       console.log('✅ Button found with fallback:', selectors[i]);
                        btn.click();
-                       console.log('✅ Button clicked');
                        return true;
                      }
                    } catch (e) {}
                  }
                  
-                 console.warn('⚠️ No visible button found for customer:', id);
                  return false;
                }
               
@@ -238,7 +240,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
               
               setTimeout(() => {
                 if (window.location.pathname === '${path}') {
-                  console.log('✅ Already on target path');
                   ${
                     isCustomerPath && customerId
                       ? `
@@ -247,7 +248,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
                       : ''
                   }
                 } else {
-                  console.log('🔄 Navigating...');
                   navigate();
                   ${
                     isCustomerPath && customerId
@@ -261,7 +261,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
                       setTimeout(() => clickButton('${customerId}'), 2500);
                     } else if (attempts > 15) {
                       clearInterval(checkInterval);
-                      console.warn('⚠️ Navigation timeout');
                     }
                   }, 500);
                   `
@@ -271,7 +270,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
               }, navigationDelay);
               
             } catch (e) {
-              console.error('❌ Script error:', e);
               setTimeout(() => {
                 window.location.href = '${path}';
               }, ${needsSlowRegularNav ? '2000' : '500'});
@@ -284,20 +282,14 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       const createButtonClickScript = (customerId: string) => {
         return `
           (function() {
-            console.log('🔘 Button click script for customer:', '${customerId}');
-            
             // Primary method: getElementById (as used by user's site)
             try {
               const primaryBtn = document.getElementById('customer.${customerId}.button');
               if (primaryBtn && primaryBtn.offsetParent !== null) {
-                console.log('✅ Button found with getElementById');
                 primaryBtn.click();
-                console.log('✅ Button clicked successfully');
                 return true;
               }
-            } catch (e) {
-              console.warn('⚠️ getElementById failed:', e.message);
-            }
+            } catch (e) {}
             
             // Fallback selectors
             const selectors = [
@@ -312,20 +304,16 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
               'div[data-customer="${customerId}"] button'
             ];
             
-            console.log('🔄 Trying fallback selectors...');
             for (let i = 0; i < selectors.length; i++) {
               try {
                 const btn = document.querySelector(selectors[i]);
                 if (btn && btn.offsetParent !== null) {
-                  console.log('✅ Button found with fallback:', selectors[i]);
                   btn.click();
-                  console.log('✅ Button clicked');
                   return true;
                 }
               } catch (e) {}
             }
             
-            console.warn('⚠️ No visible button found for customer:', '${customerId}');
             return false;
           })();
         `;
@@ -345,29 +333,18 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   // 🔍 Check for pending navigation immediately (for app cold start)
   const checkPendingNavigation = async () => {
     try {
-      console.log('🔍 Checking for pending navigation...');
-
       const storedPath = NativeLocalStorage.getItem('path');
       const storedCustomerId = NativeLocalStorage.getItem('customerId');
 
       if (!storedPath) {
-        console.log('✅ No pending navigation found');
         return;
       }
-
-      console.log(
-        '🎯 Found pending navigation:',
-        storedPath,
-        storedCustomerId ? `(customer: ${storedCustomerId})` : '',
-      );
 
       // Wait for WebView to be ready
       let attempts = 0;
       const waitForWebView = () => {
         attempts++;
         if (webViewRef.current && attempts < 50) {
-          console.log('🚀 WebView ready, executing pending navigation');
-
           // Execute the same logic as path monitoring
           if (storedPath && storedPath.trim() !== '') {
             // Any path navigation (includes customer path with button click)
@@ -378,10 +355,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
           }
         } else if (attempts < 50) {
           setTimeout(waitForWebView, 100);
-        } else {
-          console.warn(
-            '⚠️ WebView not ready after 5 seconds, skipping pending navigation',
-          );
         }
       };
 
@@ -392,9 +365,7 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
           ? 2000
           : 500;
       setTimeout(waitForWebView, delayTime);
-    } catch (error) {
-      console.error('❌ Error in checkPendingNavigation:', error);
-    }
+    } catch (error) {}
   };
 
   // Helper functions for pending navigation
@@ -403,7 +374,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     customerId: string | null,
   ) => {
     const isCustomerPath = path === '/dashboard/customers';
-    console.log('🚀 Executing pending navigation to:', path);
 
     // Simple navigation script for pending execution
     const isFilePath = path.includes('/dashboard/files-mobile/');
@@ -413,22 +383,15 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     const jsCode = `
       (function() {
         try {
-          console.log('🚀 Pending navigation to: ${path}');
-          
           function navigate() {
-            ${needsSlowNavigation ? 'console.log("📁 Slow navigation - using slower method");' : ''}
-            
             if (window.next?.router) {
               window.next.router.push('${path}');
-              console.log('✅ Next.js router navigation');
               return true;
             }
             if (window.__NEXT_ROUTER__) {
               window.__NEXT_ROUTER__.push('${path}');
-              console.log('✅ __NEXT_ROUTER__ navigation');
               return true;
             }
-            console.log('✅ Direct navigation');
             window.location.href = '${path}';
             return true;
           }
@@ -438,7 +401,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
               const btn = document.getElementById('customer.' + id + '.button');
               if (btn && btn.offsetParent !== null) {
                 btn.click();
-                console.log('✅ Pending button clicked');
                 return true;
               }
             } catch (e) {}
@@ -450,7 +412,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
           
           setTimeout(() => {
             if (window.location.pathname === '${path}') {
-              console.log('✅ Already on target path');
               ${isCustomerPath && customerId ? `setTimeout(() => clickButton('${customerId}'), 2500);` : ''}
             } else {
               navigate();
@@ -475,7 +436,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
           }, navigationDelay);
           
         } catch (e) {
-          console.error('❌ Pending navigation error:', e);
           setTimeout(() => {
             window.location.href = '${path}';
           }, ${needsSlowNavigation ? '2000' : '500'});
@@ -493,7 +453,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     const clearDelay = needsSlowClear ? 4000 : 1000; // Slow navigation needs more time
 
     setTimeout(() => {
-      console.log('🧹 Clearing pending navigation data');
       NativeLocalStorage.setItem('', 'path');
       if (!isCustomerPath) {
         NativeLocalStorage.setItem('', 'customerId');
@@ -502,25 +461,17 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   };
 
   const handlePendingCustomerClick = (customerId: string) => {
-    console.log('🔘 Executing pending customer button click for:', customerId);
-
     // Simple button click script for pending execution
     const jsCode = `
       (function() {
-        console.log('🔘 Pending button click for: ${customerId}');
-        
         try {
           const btn = document.getElementById('customer.${customerId}.button');
           if (btn && btn.offsetParent !== null) {
             btn.click();
-            console.log('✅ Pending button clicked successfully');
             return true;
           }
-        } catch (e) {
-          console.warn('⚠️ Pending button click failed:', e.message);
-        }
+        } catch (e) {}
         
-        console.warn('⚠️ Pending button not found for customer: ${customerId}');
         return false;
       })();
     `;
@@ -529,7 +480,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
 
     // Clear data after execution (slower for stability)
     setTimeout(() => {
-      console.log('🧹 Clearing pending customer data');
       NativeLocalStorage.setItem('', 'customerId');
     }, 3000); // کندتر برای پایداری
   };
@@ -538,17 +488,217 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        safeLog.info('Initializing web component...');
+        // 📱 Initialize OTP verification
+        try {
+          const onOtpFound = (otp: string) => {
+            // Advanced OTP injection with timing, DOM observation, and persistence
+            const jsCode = `
+              (function() {
+                // Store OTP globally for persistence
+                window.PENDING_OTP = '${otp}';
+                
+                function attemptOTPInjection(otp, attempt = 1) {
+                  let success = false;
+                  
+                  // Method 1: Direct function calls (multiple possible names)
+                  const functionNames = ['setCodeString', 'setCode', 'setOTP', 'setVerificationCode', 'updateCode', 'handleOTPInput'];
+                  for (let funcName of functionNames) {
+                    try {
+                      if (typeof window[funcName] === 'function') {
+                        window[funcName](otp);
+                        success = true;
+                        break;
+                      }
+                    } catch (e) {}
+                  }
+                  
+                  // Method 2: Enhanced input field detection
+                  if (!success) {
+                    const selectors = [
+                      // Basic selectors
+                      'input[name="code"]', 'input[name="otp"]', 'input[name="verificationCode"]',
+                      'input[id="code"]', 'input[id="otp"]', 'input[id="verificationCode"]',
+                      // Persian text
+                      'input[placeholder*="کد"]', 'input[placeholder*="تایید"]',
+                      // English text  
+                      'input[placeholder*="code"]', 'input[placeholder*="verification"]', 'input[placeholder*="OTP"]',
+                      // Length-based detection
+                      'input[type="text"][maxlength="6"]', 'input[type="text"][maxlength="4"]', 'input[type="text"][maxlength="5"]',
+                      'input[type="number"][maxlength="6"]', 'input[type="number"][maxlength="4"]', 'input[type="number"][maxlength="5"]',
+                      // Class-based
+                      '.verification-input', '.otp-input', '.code-input', '.verification-code', 
+                      '.otp-field', '.code-field', '.pin-input', '.sms-code',
+                      // Nested searches
+                      '.verification-input input', '.otp-input input', '.code-input input',
+                      '.form-control[name*="code"]', '.form-control[name*="otp"]',
+                      // Data attributes
+                      '[data-testid*="code"]', '[data-testid*="otp"]', '[data-testid*="verification"]',
+                      // Any text input that looks like OTP (fallback)
+                      'input[type="text"]:not([name]):not([id])', 'input[type="number"]:not([name]):not([id])'
+                    ];
+                    
+                    for (let selector of selectors) {
+                      try {
+                        const inputs = document.querySelectorAll(selector);
+                        for (let input of inputs) {
+                          if (input && input.offsetParent !== null && !input.disabled && !input.readOnly) {
+                            // Try multiple ways to set value
+                            const originalValue = input.value;
+                            
+                            // Native value setting
+                            input.value = otp;
+                            
+                            // React-style value setting
+                            const valueSetter = Object.getOwnPropertyDescriptor(input, 'value') || 
+                                              Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value');
+                            if (valueSetter && valueSetter.set) {
+                              valueSetter.set.call(input, otp);
+                            }
+                            
+                            // Trigger all possible events
+                            ['focus', 'input', 'change', 'blur', 'keydown', 'keyup'].forEach(eventType => {
+                              try {
+                                input.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
+                              } catch (e) {}
+                            });
+                            
+                            // React synthetic events
+                            try {
+                              const event = new Event('input', { bubbles: true });
+                              event.simulated = true;
+                              input.dispatchEvent(event);
+                            } catch (e) {}
+                            
+                            if (input.value === otp || input.value !== originalValue) {
+                              success = true;
+                              break;
+                            }
+                          }
+                        }
+                        if (success) break;
+                      } catch (e) {}
+                    }
+                  }
+                  
+                  // Method 3: React Fiber traversal (advanced)
+                  if (!success && window.React) {
+                    try {
+                      // Find all React components and try to set state
+                      const allElements = document.querySelectorAll('*');
+                      for (let element of allElements) {
+                        const keys = Object.keys(element).filter(key => key.startsWith('__reactInternalInstance') || key.startsWith('__reactFiber'));
+                        for (let key of keys) {
+                          try {
+                            const fiber = element[key];
+                            if (fiber && fiber.memoizedProps && typeof fiber.memoizedProps.onChange === 'function') {
+                              fiber.memoizedProps.onChange({ target: { value: otp } });
+                              success = true;
+                              break;
+                            }
+                          } catch (e) {}
+                        }
+                        if (success) break;
+                      }
+                    } catch (e) {}
+                  }
+                  
+                  // Method 4: Global state and callbacks
+                  try {
+                    window.receivedOTP = otp;
+                    window.autoFillOTP = otp;
+                    window.injectedOTP = otp;
+                    
+                    // Try various callback names
+                    const callbacks = ['handleOTPReceived', 'onOTPReceived', 'setOTPValue', 'fillOTP', 'autoFillOTP'];
+                    for (let callback of callbacks) {
+                      if (typeof window[callback] === 'function') {
+                        window[callback](otp);
+                        success = true;
+                      }
+                    }
+                  } catch (e) {}
+                  
+                  // Method 5: Custom events with different names
+                  try {
+                    const events = [
+                      { name: 'otpReceived', detail: { otp: otp } },
+                      { name: 'smsCodeReceived', detail: { code: otp } },
+                      { name: 'verificationCodeReceived', detail: { verificationCode: otp } },
+                      { name: 'autoFillOTP', detail: { value: otp } },
+                      { name: 'codeInput', detail: { code: otp } }
+                    ];
+                    
+                    for (let eventConfig of events) {
+                      const customEvent = new CustomEvent(eventConfig.name, { detail: eventConfig.detail });
+                      document.dispatchEvent(customEvent);
+                      window.dispatchEvent(customEvent);
+                    }
+                  } catch (e) {}
+                  
+                  return success;
+                }
+                
+                // Initial attempt
+                let success = attemptOTPInjection('${otp}');
+                
+                // If failed, set up observers and retry with delays
+                if (!success) {
+                  // Setup MutationObserver for DOM changes
+                  const observer = new MutationObserver(function(mutations) {
+                    if (window.PENDING_OTP) {
+                      if (attemptOTPInjection(window.PENDING_OTP)) {
+                        window.PENDING_OTP = null;
+                        observer.disconnect();
+                      }
+                    }
+                  });
+                  
+                  observer.observe(document.body, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    attributeFilter: ['class', 'id', 'name']
+                  });
+                  
+                  // Retry with increasing delays
+                  const delays = [500, 1000, 2000, 3000, 5000];
+                  delays.forEach((delay, index) => {
+                    setTimeout(() => {
+                      if (window.PENDING_OTP) {
+                        if (attemptOTPInjection(window.PENDING_OTP, index + 2)) {
+                          window.PENDING_OTP = null;
+                          observer.disconnect();
+                        }
+                      }
+                    }, delay);
+                  });
+                  
+                  // Cleanup after 10 seconds
+                  setTimeout(() => {
+                    observer.disconnect();
+                    window.PENDING_OTP = null;
+                  }, 10000);
+                }
+                
+                return success;
+              })();
+            `;
+
+            if (webViewRef && webViewRef.current) {
+              webViewRef.current.injectJavaScript(jsCode);
+            }
+          };
+
+          await smsHelpers.setupSMS(onOtpFound);
+        } catch (error) {}
 
         // Check for existing token
         const existingToken = await TokenService.getValidAccessToken();
 
         if (existingToken) {
           setInitialUrl('https://www.arkafile.org/dashboard');
-          safeLog.info('Token found, starting at dashboard');
         } else {
           setInitialUrl('https://www.arkafile.org/login');
-          safeLog.info('No token found, starting at login');
         }
 
         // Add small delay to ensure URL is set before rendering
@@ -561,7 +711,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
           }
         }, 100);
       } catch (error) {
-        safeLog.error('Error initializing app', error);
         setInitialUrl('https://www.arkafile.org/login'); // Fallback to login
         setIsInitialized(true);
 
@@ -586,11 +735,11 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     const url = event.url;
 
     try {
+      // Update current URL for OTP logic
+
       // Handle special protocols
       if (url.startsWith('tel:') || url.startsWith('mailto:')) {
-        Linking.openURL(url).catch(error => {
-          safeLog.error('Failed to open external link', error);
-        });
+        Linking.openURL(url).catch(error => {});
         return false;
       }
 
@@ -601,17 +750,13 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       );
 
       if (!isAllowedDomain) {
-        safeLog.info('Opening external URL in browser:', url);
-        Linking.openURL(url).catch(error => {
-          safeLog.error('Failed to open external browser', error);
-        });
+        Linking.openURL(url).catch(() => {});
         return false;
       }
 
       // Allow navigation within allowed domains
       return true;
     } catch (error) {
-      safeLog.error('Navigation error', error);
       return false;
     }
   }, []);
@@ -620,18 +765,12 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   const initializeSSEConnection = useCallback(async () => {
     try {
       if (isInitialized) {
-        safeLog.warn('SSE connection already initialized, skipping...');
         return;
       }
 
-      safeLog.info('Initializing SSE connection for the first time...');
-
       await BackgroundNotifModule?.StartConnection();
       setIsInitialized(true);
-      safeLog.info('SSE Connection initialized successfully');
-    } catch (error) {
-      safeLog.error('Error initializing SSE connection', error);
-    }
+    } catch (error) {}
   }, [isInitialized]);
 
   // 🔄 Retry token search with timeout
@@ -679,7 +818,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     try {
       // Prevent concurrent token checks
       if (tokenCheckInProgress) {
-        safeLog.info('Token sync already in progress, skipping...');
         return;
       }
 
@@ -726,16 +864,12 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   const handleLoadEnd = useCallback(async () => {
     try {
       setLoading(false);
-      safeLog.info('WebView load completed');
 
       // Initialize SSE connection if needed
       if (!isInitialized && !tokenCheckInProgress) {
-        safeLog.info('First load completed - initializing SSE...');
         await syncTokenFromCookies();
       }
-    } catch (error) {
-      safeLog.error('Error in handleLoadEnd', error);
-    }
+    } catch (error) {}
   }, [isInitialized, tokenCheckInProgress, syncTokenFromCookies]);
 
   // 📨 Handle messages from WebView
@@ -781,7 +915,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   const handleError = useCallback(
     (error?: any) => {
       try {
-        safeLog.error('WebView error occurred', error);
         setHasError(true);
 
         // Show user-friendly error with native Alert
@@ -795,17 +928,13 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
                 try {
                   setHasError(false);
                   webViewRef.current?.reload();
-                } catch (reloadError) {
-                  safeLog.error('Error reloading WebView', reloadError);
-                }
+                } catch (reloadError) {}
               },
             },
             {text: 'بستن', style: 'cancel'},
           ],
         );
-      } catch (alertError) {
-        safeLog.error('Error showing alert', alertError);
-      }
+      } catch (alertError) {}
     },
     [setHasError, webViewRef],
   );
@@ -815,9 +944,7 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     (event: any) => {
       try {
         setCanGoBack(event.nativeEvent.canGoBack);
-      } catch (error) {
-        safeLog.error('Error in handleLoadProgress', error);
-      }
+      } catch (error) {}
     },
     [setCanGoBack],
   );
@@ -902,7 +1029,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
               }
             } catch (error) {
               // Silent fail to prevent crashes
-              safeLog('Error in click handler', error);
             }
           }
           
@@ -920,7 +1046,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
             });
           } catch (error) {
             // Silent fail if event listeners can't be added
-            safeLog('Error setting up event listeners', error);
           }
         })();
         
