@@ -744,7 +744,13 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       }
 
       // Check domain whitelist
-      const allowedDomains = ['arkafile.org', 'arkafile.info'];
+      const allowedDomains = [
+        'arkafile.org',
+        'arkafile.info',
+        'shaparak.ir',
+        'zarinpal.com',
+        'zarinpal.ir',
+      ];
       const isAllowedDomain = allowedDomains.some(domain =>
         url.includes(domain),
       );
