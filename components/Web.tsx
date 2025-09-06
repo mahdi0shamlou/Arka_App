@@ -761,6 +761,28 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
         return false;
       }
 
+      if (url.includes('arkafile.org') && url.includes('payment')) {
+        TokenService.forceSyncFromCookies();
+
+        if (url.includes('payment-fail')) {
+          setTimeout(() => {
+            setInitialUrl(
+              'https://www.arkafile.org/dashboard/factors/payment-fail',
+            );
+            webViewRef.current?.reload();
+          }, 500);
+        }
+        if (url.includes('payment-success')) {
+          setTimeout(() => {
+            setInitialUrl(
+              'https://www.arkafile.org/dashboard/factors/payment-success',
+            );
+            webViewRef.current?.reload();
+          }, 500);
+        }
+        return true;
+      }
+
       // Allow navigation within allowed domains
       return true;
     } catch (error) {
