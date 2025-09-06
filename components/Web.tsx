@@ -751,6 +751,7 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
         'zarinpal.com',
         'zarinpal.ir',
       ];
+
       const isAllowedDomain = allowedDomains.some(domain =>
         url.includes(domain),
       );
@@ -1017,8 +1018,9 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
               
               const text = e.target.textContent || e.target.innerText || '';
               const lowerText = text.toLowerCase();
-              
-              if (lowerText.includes('خروج') || lowerText.includes('logout')) {
+              const targetType = e.target.tagName || 'no';
+
+              if (lowerText.includes('خروج از حساب') && targetType === 'SPAN') {
                 if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
                   window.ReactNativeWebView.postMessage(JSON.stringify({
                     type: 'LOGOUT',
