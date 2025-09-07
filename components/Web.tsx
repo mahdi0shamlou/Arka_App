@@ -731,13 +731,10 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
     };
   }, []);
 
-  // 🌐 Navigation handler with security checks
   const handleNavigation = useCallback((event: any) => {
     const url = event.url;
 
     try {
-      // Update current URL for OTP logic
-
       // Handle special protocols
       if (url.startsWith('tel:') || url.startsWith('mailto:')) {
         Linking.openURL(url).catch(error => {});
@@ -767,25 +764,40 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
         setIsInitialized(false);
         if (url.includes('payment-fail')) {
           setTimeout(() => {
-            setIsInitialized(true);
-
             Alert.alert(
               'پرداخت ناموفق',
               'در صورت کسر وجه، مبلغ طی 72 ساعت به حساب شما برگشت داده خواهد شد.',
-              [{text: 'باشه', style: 'cancel'}],
+              [
+                {
+                  text: 'بازگشت به داشبورد',
+                  style: 'cancel',
+                  onPress: () => {
+                    setIsInitialized(true);
+                    webViewRef.current?.reload();
+                  },
+                },
+              ],
             );
           }, 100);
         }
         if (url.includes('payment-success')) {
           setIsInitialized(false);
           setTimeout(() => {
-            setIsInitialized(true);
             Alert.alert(
               'پرداخت موفق',
               'پرداخت شما با موفقیت انجام شد. به صفحه داشبورد منتقل خواهید شد.',
-              [{text: 'باشه', style: 'cancel'}],
+              [
+                {
+                  text: 'بازگشت به داشبورد',
+                  style: 'cancel',
+                  onPress: () => {
+                    setIsInitialized(true);
+                    webViewRef.current?.reload();
+                  },
+                },
+              ],
             );
-          }, 500);
+          }, 100);
         }
         return true;
       }
