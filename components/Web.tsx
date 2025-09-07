@@ -763,21 +763,37 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
 
       if (url.includes('arkafile.org') && url.includes('payment')) {
         TokenService.forceSyncFromCookies();
-
+        setIsInitialized(false);
         if (url.includes('payment-fail')) {
           setTimeout(() => {
-            setInitialUrl(
-              'https://www.arkafile.org/dashboard/factors/payment-fail',
+            setIsInitialized(true);
+            Alert.alert(
+              'پرداخت ناموفق',
+              'در صورت کسر وجه، مبلغ طی 72 ساعت به حساب شما برگشت داده خواهد شد.',
+              [
+                {
+                  text: 'بستن',
+                  style: 'cancel',
+                },
+              ],
             );
-            webViewRef.current?.reload();
-          }, 500);
+          }, 100);
         }
         if (url.includes('payment-success')) {
+          setIsInitialized(false);
+
           setTimeout(() => {
-            setInitialUrl(
-              'https://www.arkafile.org/dashboard/factors/payment-success',
+            setIsInitialized(true);
+            Alert.alert(
+              'پرداخت موفق',
+              'پرداخت شما با موفقیت انجام شد. به صفحه داشبورد منتقل خواهید شد.',
+              [
+                {
+                  text: 'بستن',
+                  style: 'cancel',
+                },
+              ],
             );
-            webViewRef.current?.reload();
           }, 500);
         }
         return true;
@@ -789,6 +805,8 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       return false;
     }
   }, []);
+
+  console.log(initialUrl);
 
   // 🔌 Initialize SSE connection (called once)
   const initializeSSEConnection = useCallback(async () => {
