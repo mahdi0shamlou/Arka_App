@@ -98,6 +98,7 @@ const smsHelpers = {
 function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   const [initialUrl, setInitialUrl] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
+
   const [tokenCheckInProgress, setTokenCheckInProgress] =
     useState<boolean>(false);
   // 📍 No state tracking needed - execute every path immediately
@@ -767,32 +768,22 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
         if (url.includes('payment-fail')) {
           setTimeout(() => {
             setIsInitialized(true);
+
             Alert.alert(
               'پرداخت ناموفق',
               'در صورت کسر وجه، مبلغ طی 72 ساعت به حساب شما برگشت داده خواهد شد.',
-              [
-                {
-                  text: 'بستن',
-                  style: 'cancel',
-                },
-              ],
+              [{text: 'باشه', style: 'cancel'}],
             );
           }, 100);
         }
         if (url.includes('payment-success')) {
           setIsInitialized(false);
-
           setTimeout(() => {
             setIsInitialized(true);
             Alert.alert(
               'پرداخت موفق',
               'پرداخت شما با موفقیت انجام شد. به صفحه داشبورد منتقل خواهید شد.',
-              [
-                {
-                  text: 'بستن',
-                  style: 'cancel',
-                },
-              ],
+              [{text: 'باشه', style: 'cancel'}],
             );
           }, 500);
         }
@@ -805,8 +796,6 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
       return false;
     }
   }, []);
-
-  console.log(initialUrl);
 
   // 🔌 Initialize SSE connection (called once)
   const initializeSSEConnection = useCallback(async () => {
