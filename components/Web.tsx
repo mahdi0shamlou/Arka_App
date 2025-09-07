@@ -98,7 +98,7 @@ const smsHelpers = {
 function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   const [initialUrl, setInitialUrl] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
-
+  const [wait, setWait] = useState<boolean>(true);
   const [tokenCheckInProgress, setTokenCheckInProgress] =
     useState<boolean>(false);
   // 📍 No state tracking needed - execute every path immediately
@@ -761,7 +761,7 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
 
       if (url.includes('arkafile.org') && url.includes('payment')) {
         TokenService.forceSyncFromCookies();
-        setIsInitialized(false);
+        setWait(false);
         if (url.includes('payment-fail')) {
           setTimeout(() => {
             Alert.alert(
@@ -772,7 +772,7 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
                   text: 'بازگشت به داشبورد',
                   style: 'cancel',
                   onPress: () => {
-                    setIsInitialized(true);
+                    setWait(true);
                     webViewRef.current?.reload();
                   },
                 },
@@ -781,7 +781,7 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
           }, 100);
         }
         if (url.includes('payment-success')) {
-          setIsInitialized(false);
+          setWait(false);
           setTimeout(() => {
             Alert.alert(
               'پرداخت موفق',
@@ -791,7 +791,7 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
                   text: 'بازگشت به داشبورد',
                   style: 'cancel',
                   onPress: () => {
-                    setIsInitialized(true);
+                    setWait(true);
                     webViewRef.current?.reload();
                   },
                 },
@@ -998,7 +998,7 @@ function Web({setHasError, setLoading, setCanGoBack, webViewRef}: IProps) {
   );
 
   // Don't render until URL is determined
-  if (!isInitialized || !initialUrl) {
+  if (!isInitialized || !initialUrl || !wait) {
     return null;
   }
 
